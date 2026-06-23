@@ -6,26 +6,27 @@
 
 @layer base {
   :root {
-    --background: 60 8% 97%;
-    --foreground: 90 5% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 90 5% 11%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 90 5% 11%;
-    --primary: 143 26% 23%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 80 5% 95%;
-    --secondary-foreground: 90 5% 11%;
-    --muted: 80 5% 95%;
-    --muted-foreground: 100 3% 37%;
-    --accent: 80 5% 95%;
-    --accent-foreground: 90 5% 11%;
-    --destructive: 0 45% 51%;
+    /* Light green theme - soft, calming, fresh */
+    --background: 120 35% 96%;
+    --foreground: 140 25% 18%;
+    --card: 120 30% 99%;
+    --card-foreground: 140 25% 18%;
+    --popover: 120 30% 99%;
+    --popover-foreground: 140 25% 18%;
+    --primary: 145 35% 38%;
+    --primary-foreground: 120 40% 98%;
+    --secondary: 130 28% 92%;
+    --secondary-foreground: 140 25% 18%;
+    --muted: 130 28% 93%;
+    --muted-foreground: 140 12% 40%;
+    --accent: 135 35% 88%;
+    --accent-foreground: 140 25% 18%;
+    --destructive: 0 50% 50%;
     --destructive-foreground: 0 0% 100%;
-    --border: 80 9% 90%;
-    --input: 80 9% 90%;
-    --ring: 143 26% 23%;
-    --radius: 0.375rem;
+    --border: 130 25% 86%;
+    --input: 130 25% 86%;
+    --ring: 145 35% 38%;
+    --radius: 0.5rem;
   }
 }
 
@@ -33,28 +34,37 @@
   * { @apply border-border; }
   html, body, #root { height: 100%; }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
     font-family: 'Work Sans', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Soft light-green gradient: fresh at top, fading to nearly white-green at bottom */
+    background:
+      linear-gradient(180deg,
+        hsl(135, 45%, 92%) 0%,
+        hsl(130, 40%, 95%) 40%,
+        hsl(125, 35%, 97%) 75%,
+        hsl(120, 30%, 99%) 100%
+      );
+    background-attachment: fixed;
+    min-height: 100vh;
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Manrope', system-ui, sans-serif;
     letter-spacing: -0.01em;
+    color: hsl(145, 40%, 22%);
   }
 }
 
-/* Subtle scrollbar */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: #d1d5ce; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: hsl(135, 25%, 78%); border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 
-/* Custom utility: small label */
 .label-tiny {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 0.7rem;
-  color: #5C615C;
+  color: hsl(140, 15%, 42%);
   font-weight: 500;
 }
 
