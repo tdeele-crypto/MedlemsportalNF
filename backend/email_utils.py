@@ -1,9 +1,12 @@
 """Email helpers for Medlemsportal — SMTP via Brevo."""
 import os
 import logging
+import uuid as _uuid
 from email.message import EmailMessage
 from datetime import datetime
 import aiosmtplib
+
+import storage_utils
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +76,9 @@ def _event_summary_html(event: dict) -> str:
     return "<br>".join(parts)
 
 
-async def _send(to_email: str, to_name: str, subject: str, body_text: str, body_html: str | None = None) -> bool:
+async def _send(to_email: str, to_name: str, subject: str, body_text: str, body_html: str | None = None,
+                inline_image: tuple[bytes, str] | None = None, image_cid: str | None = None) -> bool:
+    """Send mail. `inline_image` = (bytes, mime_type) to be embedded with Content-ID `image_cid`."""
     if not _is_configured():
         logger.warning("SMTP not configured — skipping email to %s", to_email)
         return False
@@ -86,6 +91,15 @@ async def _send(to_email: str, to_name: str, subject: str, body_text: str, body_
     msg.set_content(body_text)
     if body_html:
         msg.add_alternative(body_html, subtype="html")
+        if inline_image and image_cid:
+            try:
+                data, mime = inline_image
+                maintype, subtype = (mime or "image/jpeg").split("/", 1)
+                # Attach to the HTML part as related
+                html_part = msg.get_payload()[-1]
+                html_part.add_related(data, maintype=maintype, subtype=subtype, cid=f"<{image_cid}>")
+            except Exception as e:
+                logger.warning("Inline image attach failed: %s", e)
     try:
         await aiosmtplib.send(
             msg,
@@ -101,6 +115,29 @@ async def _send(to_email: str, to_name: str, subject: str, body_text: str, body_
     except Exception as e:
         logger.error("Email send failed (to=%s subject=%r): %s", to_email, subject, e)
         return False
+
+
+def _fetch_event_image(event: dict) -> tuple[tuple[bytes, str] | None, str | None]:
+    """Returns ((bytes, mime_type), cid) for the event image, or (None, None) if not available."""
+    path = event.get("image_path")
+    if not path:
+        return None, None
+    try:
+        data, mime = storage_utils.get_object(path)
+        cid = f"event-img-{_uuid.uuid4().hex}"
+        return (data, mime), cid
+    except Exception as e:
+        logger.warning("Could not fetch event image %s: %s", path, e)
+        return None, None
+
+
+def _image_html(cid: str | None) -> str:
+    if not cid:
+        return ""
+    return (
+        f'<img src="cid:{cid}" alt="" style="display:block; width:100%; max-width:520px; '
+        f'height:auto; border-radius:6px; margin:0 0 14px;">'
+    )
 
 
 def _html_wrap(title: str, body_html: str) -> str:
@@ -144,19 +181,26 @@ async def send_registration_email(member: dict, event: dict, num_members: int, n
         f"Vi glæder os til at se dig.\n\nVenlig hilsen\n{FROM_NAME}"
     )
 
+    image, image_cid = _fetch_event_image(event)
     html_body = f"""
       <p style="margin:0 0 16px;">Hej {member.get('navn', '')}</p>
       <p style="margin:0 0 16px;">Du er nu tilmeldt arrangementet:</p>
+      {_image_html(image_cid)}
       <div style="background:#F5F6F1; border-left:3px solid #2C4C3B; padding:14px 16px; border-radius:4px; margin:12px 0;">
         <div style="font-weight:600; font-size:16px;">{title}</div>
         <div style="color:#5C615C; font-size:14px; margin-top:6px;">{summary_html}</div>
       </div>
+      {f'<p style="margin:0 0 16px; color:#1B1F1B; white-space:pre-line;">{event.get("description", "")}</p>' if event.get("description") else ''}
       <p style="margin:0 0 8px;"><strong>Antal:</strong> {total} ({num_members} medlemmer + {num_non_members} ikke-medlemmer)</p>
       {f'<p style="margin:0 0 8px;"><strong>Forventet betaling:</strong> {expected:g} kr.</p>' if expected > 0 else ''}
       {f'<p style="margin:0 0 8px;"><strong>Note:</strong> {note}</p>' if note else ''}
       <p style="margin:24px 0 0;">Vi glæder os til at se dig.</p>
     """
-    return await _send(to_email, member.get("navn", ""), f"Tilmelding bekræftet — {title}", text, _html_wrap("Tilmelding bekræftet", html_body))
+    return await _send(
+        to_email, member.get("navn", ""), f"Tilmelding bekræftet — {title}",
+        text, _html_wrap("Tilmelding bekræftet", html_body),
+        inline_image=image, image_cid=image_cid,
+    )
 
 
 async def send_payment_email(participant: dict, event: dict) -> bool:
@@ -173,9 +217,11 @@ async def send_payment_email(participant: dict, event: dict) -> bool:
         + (f"{event.get('description', '')}\n\n" if event.get("description") else "")
         + f"Tak! Vi ses.\n\nVenlig hilsen\n{FROM_NAME}"
     )
+    image, image_cid = _fetch_event_image(event)
     html_body = f"""
       <p style="margin:0 0 16px;">Hej {participant.get('navn', '')}</p>
       <p style="margin:0 0 16px;">Vi har registreret din betaling for arrangementet:</p>
+      {_image_html(image_cid)}
       <div style="background:#F5F6F1; border-left:3px solid #2C4C3B; padding:14px 16px; border-radius:4px; margin:12px 0;">
         <div style="font-weight:600; font-size:16px;">{title}</div>
         <div style="color:#5C615C; font-size:14px; margin-top:6px;">{summary_html}</div>
@@ -183,7 +229,11 @@ async def send_payment_email(participant: dict, event: dict) -> bool:
       {f'<p style="margin:0 0 16px; color:#1B1F1B; white-space:pre-line;">{event.get("description", "")}</p>' if event.get("description") else ''}
       <p style="margin:24px 0 0;">Tak! Vi ses.</p>
     """
-    return await _send(to_email, participant.get("navn", ""), f"Betaling registreret — {title}", text, _html_wrap("Betaling registreret", html_body))
+    return await _send(
+        to_email, participant.get("navn", ""), f"Betaling registreret — {title}",
+        text, _html_wrap("Betaling registreret", html_body),
+        inline_image=image, image_cid=image_cid,
+    )
 
 
 async def send_reminder_email(participant: dict, event: dict) -> bool:
@@ -200,9 +250,11 @@ async def send_reminder_email(participant: dict, event: dict) -> bool:
         + (f"{event.get('description', '')}\n\n" if event.get("description") else "")
         + f"Vi glæder os til at se dig.\n\nVenlig hilsen\n{FROM_NAME}"
     )
+    image, image_cid = _fetch_event_image(event)
     html_body = f"""
       <p style="margin:0 0 16px;">Hej {participant.get('navn', '')}</p>
       <p style="margin:0 0 16px;">Bare en lille påmindelse: Du er tilmeldt arrangementet om <strong>2 dage</strong>.</p>
+      {_image_html(image_cid)}
       <div style="background:#F5F6F1; border-left:3px solid #2C4C3B; padding:14px 16px; border-radius:4px; margin:12px 0;">
         <div style="font-weight:600; font-size:16px;">{title}</div>
         <div style="color:#5C615C; font-size:14px; margin-top:6px;">{summary_html}</div>
@@ -210,4 +262,8 @@ async def send_reminder_email(participant: dict, event: dict) -> bool:
       {f'<p style="margin:0 0 16px; color:#1B1F1B; white-space:pre-line;">{event.get("description", "")}</p>' if event.get("description") else ''}
       <p style="margin:24px 0 0;">Vi glæder os til at se dig.</p>
     """
-    return await _send(to_email, participant.get("navn", ""), f"Påmindelse: {title} om 2 dage", text, _html_wrap("Påmindelse om arrangement", html_body))
+    return await _send(
+        to_email, participant.get("navn", ""), f"Påmindelse: {title} om 2 dage",
+        text, _html_wrap("Påmindelse om arrangement", html_body),
+        inline_image=image, image_cid=image_cid,
+    )
