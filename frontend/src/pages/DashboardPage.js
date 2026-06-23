@@ -86,6 +86,7 @@ export default function DashboardPage() {
                   <div className="font-medium text-foreground">{ev.title}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
                     {ev.event_date ? new Date(ev.event_date).toLocaleDateString("da-DK") : "Ingen dato"}
+                    {ev.event_time ? ` kl. ${ev.event_time}` : ""}
                     {ev.location ? ` · ${ev.location}` : ""}
                   </div>
                 </div>

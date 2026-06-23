@@ -22,7 +22,7 @@ export default function EventsPage() {
   const isAdmin = user?.role === "admin";
   const [events, setEvents] = useState([]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", location: "", event_date: "", price_member: "", price_non_member: "" });
+  const [form, setForm] = useState({ title: "", description: "", location: "", event_date: "", event_time: "", price_member: "", price_non_member: "" });
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -48,7 +48,7 @@ export default function EventsPage() {
         price_non_member: Number(form.price_non_member) || 0,
       });
       setOpen(false);
-      setForm({ title: "", description: "", location: "", event_date: "", price_member: "", price_non_member: "" });
+      setForm({ title: "", description: "", location: "", event_date: "", event_time: "", price_member: "", price_non_member: "" });
       await load();
       toast.success("Arrangement oprettet");
     } catch (err) {
@@ -93,15 +93,27 @@ export default function EventsPage() {
                     data-testid="event-title-input"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="event_date">Dato</Label>
-                  <Input
-                    id="event_date"
-                    type="date"
-                    value={form.event_date}
-                    onChange={(e) => setForm({ ...form, event_date: e.target.value })}
-                    data-testid="event-date-input"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="event_date">Dato</Label>
+                    <Input
+                      id="event_date"
+                      type="date"
+                      value={form.event_date}
+                      onChange={(e) => setForm({ ...form, event_date: e.target.value })}
+                      data-testid="event-date-input"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="event_time">Tidspunkt</Label>
+                    <Input
+                      id="event_time"
+                      type="time"
+                      value={form.event_time}
+                      onChange={(e) => setForm({ ...form, event_time: e.target.value })}
+                      data-testid="event-time-input"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="location">Sted</Label>
@@ -199,6 +211,7 @@ export default function EventsPage() {
                         month: "long",
                         year: "numeric",
                       })}
+                      {ev.event_time && <span className="ml-1">kl. {ev.event_time}</span>}
                     </div>
                   )}
                   {ev.location && (

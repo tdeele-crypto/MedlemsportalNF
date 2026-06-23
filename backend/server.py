@@ -136,6 +136,7 @@ class EventIn(BaseModel):
     description: str = ""
     location: str = ""
     event_date: Optional[str] = None  # ISO string yyyy-mm-dd or full ISO
+    event_time: Optional[str] = None  # HH:MM
     price_member: float = 0
     price_non_member: float = 0
 
@@ -146,6 +147,7 @@ class EventOut(BaseModel):
     description: str = ""
     location: str = ""
     event_date: Optional[str] = None
+    event_time: Optional[str] = None
     created_at: str
     price_member: float = 0
     price_non_member: float = 0
@@ -214,6 +216,7 @@ def event_to_out(doc, count: int = 0, total_members: int = 0, total_non_members:
         "description": doc.get("description", ""),
         "location": doc.get("location", ""),
         "event_date": doc.get("event_date"),
+        "event_time": doc.get("event_time"),
         "created_at": doc.get("created_at", ""),
         "price_member": float(doc.get("price_member", 0) or 0),
         "price_non_member": float(doc.get("price_non_member", 0) or 0),
@@ -544,6 +547,7 @@ async def create_event(payload: EventIn, _admin: dict = Depends(require_admin)):
         "description": payload.description or "",
         "location": payload.location or "",
         "event_date": payload.event_date,
+        "event_time": payload.event_time,
         "price_member": float(payload.price_member or 0),
         "price_non_member": float(payload.price_non_member or 0),
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -569,6 +573,7 @@ async def update_event(event_id: str, payload: EventIn, _admin: dict = Depends(r
         "description": payload.description or "",
         "location": payload.location or "",
         "event_date": payload.event_date,
+        "event_time": payload.event_time,
         "price_member": float(payload.price_member or 0),
         "price_non_member": float(payload.price_non_member or 0),
     }

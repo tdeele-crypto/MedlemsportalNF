@@ -46,7 +46,7 @@ export default function EventDetailPage() {
   // Edit event
   const [eventEditOpen, setEventEditOpen] = useState(false);
   const [eventForm, setEventForm] = useState({
-    title: "", description: "", location: "", event_date: "", price_member: "", price_non_member: "",
+    title: "", description: "", location: "", event_date: "", event_time: "", price_member: "", price_non_member: "",
   });
 
   const loadEvent = useCallback(async () => {
@@ -153,6 +153,7 @@ export default function EventDetailPage() {
       description: event.description || "",
       location: event.location || "",
       event_date: event.event_date || "",
+      event_time: event.event_time || "",
       price_member: event.price_member ?? "",
       price_non_member: event.price_non_member ?? "",
     });
@@ -227,6 +228,7 @@ export default function EventDetailPage() {
                 {new Date(event.event_date).toLocaleDateString("da-DK", {
                   weekday: "long", day: "numeric", month: "long", year: "numeric",
                 })}
+                {event.event_time && <span className="ml-1">kl. {event.event_time}</span>}
               </span>
             )}
             {event.location && (
@@ -628,14 +630,25 @@ export default function EventDetailPage() {
                 data-testid="edit-event-title-input"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="ev-date">Dato</Label>
-              <Input
-                id="ev-date" type="date"
-                value={eventForm.event_date || ""}
-                onChange={(e) => setEventForm({ ...eventForm, event_date: e.target.value })}
-                data-testid="edit-event-date-input"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="ev-date">Dato</Label>
+                <Input
+                  id="ev-date" type="date"
+                  value={eventForm.event_date || ""}
+                  onChange={(e) => setEventForm({ ...eventForm, event_date: e.target.value })}
+                  data-testid="edit-event-date-input"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ev-time">Tidspunkt</Label>
+                <Input
+                  id="ev-time" type="time"
+                  value={eventForm.event_time || ""}
+                  onChange={(e) => setEventForm({ ...eventForm, event_time: e.target.value })}
+                  data-testid="edit-event-time-input"
+                />
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="ev-location">Sted</Label>
