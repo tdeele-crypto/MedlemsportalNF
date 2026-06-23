@@ -33,19 +33,18 @@ def _fmt_date(date_str: str | None) -> str:
 
 
 def _event_summary(event: dict) -> str:
+    """Plaintext version. Order: date+time → location → address (maps link)."""
     parts = []
     if event.get("event_date"):
         s = _fmt_date(event["event_date"])
         if event.get("event_time"):
             s += f" kl. {event['event_time']}"
         parts.append(s)
-    loc_bits = []
     if event.get("location"):
-        loc_bits.append(event["location"])
-    if event.get("address"):
-        loc_bits.append(event["address"])
-    if loc_bits:
-        parts.append(" · ".join(loc_bits))
+        parts.append(event["location"])
+    addr = event.get("address")
+    if addr:
+        parts.append(f"{addr}\nKort: {_maps_link(addr)}")
     return "\n".join(parts)
 
 
@@ -55,23 +54,22 @@ def _maps_link(address: str) -> str:
 
 
 def _event_summary_html(event: dict) -> str:
-    """HTML version of event summary, with address as clickable Google Maps link."""
+    """HTML version of event summary for the gray box.
+    Order: date+time → location → address (with Google Maps link) on its own line at the bottom.
+    """
     parts = []
     if event.get("event_date"):
         s = _fmt_date(event["event_date"])
         if event.get("event_time"):
             s += f" kl. {event['event_time']}"
         parts.append(s)
-    loc_bits = []
     if event.get("location"):
-        loc_bits.append(event["location"])
+        parts.append(event["location"])
     addr = event.get("address")
     if addr:
-        loc_bits.append(
-            f'<a href="{_maps_link(addr)}" style="color:#2C4C3B; text-decoration:underline;" target="_blank" rel="noopener">{addr}</a>'
+        parts.append(
+            f'📍 <a href="{_maps_link(addr)}" style="color:#2C4C3B; text-decoration:underline;" target="_blank" rel="noopener">{addr}</a>'
         )
-    if loc_bits:
-        parts.append(" · ".join(loc_bits))
     return "<br>".join(parts)
 
 
@@ -139,7 +137,8 @@ async def send_registration_email(member: dict, event: dict, num_members: int, n
         f"Hej {member.get('navn', '')}\n\n"
         f"Du er nu tilmeldt arrangementet: {title}.\n\n"
         f"{summary}\n\n"
-        f"Antal: {total} ({num_members} medlemmer + {num_non_members} ikke-medlemmer)"
+        + (f"{event.get('description', '')}\n\n" if event.get("description") else "")
+        + f"Antal: {total} ({num_members} medlemmer + {num_non_members} ikke-medlemmer)"
         f"{price_line}"
         f"{(chr(10) + chr(10) + 'Note: ' + note) if note else ''}\n\n"
         f"Vi glæder os til at se dig.\n\nVenlig hilsen\n{FROM_NAME}"
@@ -171,7 +170,8 @@ async def send_payment_email(participant: dict, event: dict) -> bool:
         f"Hej {participant.get('navn', '')}\n\n"
         f"Vi har registreret din betaling for arrangementet: {title}.\n\n"
         f"{summary}\n\n"
-        f"Tak! Vi ses.\n\nVenlig hilsen\n{FROM_NAME}"
+        + (f"{event.get('description', '')}\n\n" if event.get("description") else "")
+        + f"Tak! Vi ses.\n\nVenlig hilsen\n{FROM_NAME}"
     )
     html_body = f"""
       <p style="margin:0 0 16px;">Hej {participant.get('navn', '')}</p>
@@ -180,6 +180,7 @@ async def send_payment_email(participant: dict, event: dict) -> bool:
         <div style="font-weight:600; font-size:16px;">{title}</div>
         <div style="color:#5C615C; font-size:14px; margin-top:6px;">{summary_html}</div>
       </div>
+      {f'<p style="margin:0 0 16px; color:#1B1F1B; white-space:pre-line;">{event.get("description", "")}</p>' if event.get("description") else ''}
       <p style="margin:24px 0 0;">Tak! Vi ses.</p>
     """
     return await _send(to_email, participant.get("navn", ""), f"Betaling registreret — {title}", text, _html_wrap("Betaling registreret", html_body))
@@ -195,7 +196,9 @@ async def send_reminder_email(participant: dict, event: dict) -> bool:
     text = (
         f"Hej {participant.get('navn', '')}\n\n"
         f"Bare en lille påmindelse: Du er tilmeldt arrangementet {title} om 2 dage.\n\n"
-        f"{summary}\n\nVi glæder os til at se dig.\n\nVenlig hilsen\n{FROM_NAME}"
+        f"{summary}\n\n"
+        + (f"{event.get('description', '')}\n\n" if event.get("description") else "")
+        + f"Vi glæder os til at se dig.\n\nVenlig hilsen\n{FROM_NAME}"
     )
     html_body = f"""
       <p style="margin:0 0 16px;">Hej {participant.get('navn', '')}</p>
@@ -204,6 +207,7 @@ async def send_reminder_email(participant: dict, event: dict) -> bool:
         <div style="font-weight:600; font-size:16px;">{title}</div>
         <div style="color:#5C615C; font-size:14px; margin-top:6px;">{summary_html}</div>
       </div>
+      {f'<p style="margin:0 0 16px; color:#1B1F1B; white-space:pre-line;">{event.get("description", "")}</p>' if event.get("description") else ''}
       <p style="margin:24px 0 0;">Vi glæder os til at se dig.</p>
     """
     return await _send(to_email, participant.get("navn", ""), f"Påmindelse: {title} om 2 dage", text, _html_wrap("Påmindelse om arrangement", html_body))
