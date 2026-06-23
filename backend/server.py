@@ -196,7 +196,7 @@ async def get_member_registrations(member_id: str, _user: dict = Depends(get_cur
             ev = await db.events.find_one({"_id": ObjectId(ev_id)})
         out.append({
             "participant_id": str(p["_id"]),
-            "event_id": ev_id,
+            "event_id": ev_id if ev else None,
             "event_title": (ev or {}).get("title", "(slettet arrangement)"),
             "event_date": (ev or {}).get("event_date"),
             "event_time": (ev or {}).get("event_time"),
@@ -508,6 +508,8 @@ async def share_event_image(event_id: str):
         raise HTTPException(status_code=404, detail="Intet billede")
     try:
         data, content_type = storage_utils.get_object(ev["image_path"])
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Intet billede")
     except Exception as e:
         logger.error("Public image fetch failed: %s", e)
         raise HTTPException(status_code=500, detail="Kunne ikke hente billede")
@@ -688,6 +690,8 @@ async def get_file(path: str, request: Request, auth: Optional[str] = Query(None
         raise HTTPException(status_code=404, detail="Fil ikke fundet")
     try:
         data, content_type = storage_utils.get_object(path)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Fil ikke fundet")
     except Exception as e:
         logger.error("File download failed: %s", e)
         raise HTTPException(status_code=500, detail="Kunne ikke hente fil")

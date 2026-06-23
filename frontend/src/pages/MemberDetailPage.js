@@ -123,7 +123,7 @@ export default function MemberDetailPage() {
           <ul className="divide-y divide-border">
             {registrations.map((r) => {
               const total = (r.num_members || 0) + (r.num_non_members || 0);
-              const isDeleted = !r.event_id || r.event_title.startsWith("(slettet");
+              const isDeleted = !r.event_id;
               const row = (
                 <div
                   key={r.participant_id}
@@ -183,9 +183,9 @@ export default function MemberDetailPage() {
 
 function Stat({ label, value, icon: Icon, testId }) {
   return (
-    <div className="border border-border rounded-md p-3 bg-white text-center" data-testid={testId}>
+    <div className="border border-border rounded-md p-3 bg-white text-center">
       <Icon className="w-4 h-4 mx-auto text-muted-foreground mb-1" strokeWidth={1.5} />
-      <div className="text-2xl font-bold text-primary leading-none">{value}</div>
+      <div className="text-2xl font-bold text-primary leading-none" data-testid={testId}>{value}</div>
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">{label}</div>
     </div>
   );

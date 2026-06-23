@@ -5,47 +5,54 @@ Arrangement og medlems check app: Webapp skal både have frontend og backend, me
 
 ## Architecture
 - **Frontend**: React 19, React Router, Tailwind, Shadcn UI, Manrope/Work Sans
-- **Backend**: FastAPI, Motor (async MongoDB), JWT (PyJWT), bcrypt, openpyxl
+- **Backend**: FastAPI (modular: `core/{db,security,schemas,helpers,serializers}.py` + `server.py`), Motor, JWT (PyJWT), bcrypt, openpyxl
 - **Auth**: JWT (httpOnly cookie + Bearer fallback). Admin seeded on startup from env.
+- **Storage**: Local file system (`backend/storage_utils.py`) — `UPLOAD_DIR` env var on prod points outside the git repo (Contabo VPS).
 
 ## Personas
-- **Administrator** (Tina/foreningsbestyrelse): seeded `tdeele@gmail.com`. Imports members, creates events, adds/removes participants, manages user accounts.
-- **Bruger**: Read-only — can view members and event participants but cannot edit/import.
+- **Administrator** (`tdeele@gmail.com`): imports members, creates events, manages participants and users.
+- **Bruger**: read-only — views members and event participants.
 
 ## Core requirements
 - Login (email + adgangskode)
 - Excel import (`.xlsx`) — overwrites by `medlemsnummer`
 - Member fields: medlemsnummer, navn, adresse (multi-line), email, telefon (text), medlemstype, bladstatus
 - Wildcard search on medlemsnummer, navn, adresse, telefon, email
-- Events: title, dato, sted, beskrivelse
-- Participants: per-event with notes; same household added separately
+- Events: title, dato, tid, sted, adresse (DAWA), beskrivelse, billede, priser, tilmeldingsfrist, kontaktperson
+- Participants: per-event with notes; same household added separately; paid + checked-in toggles
 - Role-based: only admin mutates
+- Emails (Brevo SMTP): registration / paid / 2-day reminder
+- Facebook Group sharing via OG-tagged public preview + clipboard copy
 
-## Implemented (2026-02)
+## Implemented
 - ✅ JWT auth with seeded admin, /api/auth/{login,me,logout}, brute force lockout
 - ✅ User CRUD (admin)
-- ✅ Excel parser → parses `Medlemskaber` into `medlemstype` + `bladstatus`
-- ✅ Member list + wildcard regex search
-- ✅ Event CRUD (incl. UI edit dialog with gear icon)
-- ✅ Tid (HH:MM) felt på arrangementer
-- ✅ "Vi mødes her" + DAWA adresse-autocomplete
+- ✅ Excel import (overwrite by `medlemsnummer`)
+- ✅ Wildcard member search; clickable member rows → `/medlemmer/:id`
+- ✅ Event CRUD with cover image, DAWA address, time, deadline, contact person
 - ✅ Priser pr. arrangement, antal medl/ikke-medl pr. tilmelding
-- ✅ Betalt-checkbox + Mødt op (live check-in) checkbox
+- ✅ Betalt-checkbox + Mødt op (live check-in)
 - ✅ Økonomi-widget (Forventet/Betalt/Mangler)
 - ✅ CSV-eksport af deltagerliste med Mødt op-status
-- ✅ **SMTP via Brevo**: automatiske emails ved tilmelding, ved betaling registreret, samt påmindelse 2 dage før arrangement (APScheduler kører dagligt kl. 09:00 Europe/Copenhagen)
-- ✅ Admin endpoint `/api/admin/run-reminders` til manuel udsendelse
+- ✅ Brevo SMTP: tilmelding / betaling / påmindelse 2 dage før (APScheduler 09:00 Europe/Copenhagen)
+- ✅ `/api/admin/run-reminders` manuel udsendelse
+- ✅ Lyst grøn tema + custom logo
+- ✅ Facebook Group share (Open Graph + clipboard + manual paste flow)
+- ✅ **Lokal filsystem-storage** for Contabo VPS deploy (`UPLOAD_DIR` env)
+- ✅ **DEPLOY_CONTABO.md** trin-for-trin guide (Nginx, systemd, certbot, MongoDB, uploads-mappe udenfor repo)
+- ✅ **2026-02-23**: Modular backend refactor — `server.py` slankere; helpers/schemas/serializers/security i `core/`. EventDetailPage.js opdelt i `components/event-detail/{EventHeader,FinanceWidget,ParticipantsTable,AddParticipantDialog,EditParticipantDialog,EditEventDialog,FacebookShareDialog,utils}.js`.
+- ✅ **2026-02-23**: NEW — Medlems-detaljeside med tilmeldingshistorik (`/medlemmer/:id`) + backend `GET /api/members/{id}/registrations`. Klik på en tilmelding → arrangementets detaljeside. 10/10 tests pass + frontend Playwright flows verified.
 
 ## Backlog
-- **P2**: Email reminders til tilmeldte (Resend integration)
-- **P2**: Medlems-detaljeside med tilmeldingshistorik
 - **P3**: IP-baseret brute force i tillæg til email-baseret
 - **P3**: Restrict CORS allowlist i produktion
 - **P3**: i18n (currently DK-only)
-- **P3**: 404 i stedet for 500 ved malformed ObjectId i URLs
+- **P3**: 404 i stedet for 500 ved malformed ObjectId i URLs (delvist gjort)
 
 ## Files
-- Backend: `/app/backend/server.py`
-- Frontend pages: `/app/frontend/src/pages/{LoginPage,DashboardPage,MembersPage,EventsPage,EventDetailPage,UsersPage}.js`
+- Backend: `/app/backend/server.py`, `/app/backend/core/*.py`, `/app/backend/email_utils.py`, `/app/backend/storage_utils.py`
+- Frontend pages: `/app/frontend/src/pages/{LoginPage,DashboardPage,MembersPage,MemberDetailPage,EventsPage,EventDetailPage,QuickCheckInPage,UsersPage}.js`
+- Event detail sub-components: `/app/frontend/src/components/event-detail/*.js`
 - Auth context: `/app/frontend/src/context/AuthContext.js`
+- Deploy guide: `/app/DEPLOY_CONTABO.md`
 - Test credentials: `/app/memory/test_credentials.md`
