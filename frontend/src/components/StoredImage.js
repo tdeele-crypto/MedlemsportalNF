@@ -21,7 +21,8 @@ export default function StoredImage({ path, className = "", alt = "", placeholde
         const u = URL.createObjectURL(data);
         revoked = u;
         setUrl(u);
-      } catch {
+      } catch (err) {
+        console.warn("Could not fetch event image", err);
         setFailed(true);
       }
     })();

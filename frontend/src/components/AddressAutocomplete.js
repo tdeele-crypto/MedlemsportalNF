@@ -40,7 +40,8 @@ export default function AddressAutocomplete({ value, onChange, placeholder, "dat
         if (!res.ok) throw new Error("DAWA fejl");
         const data = await res.json();
         setSuggestions(Array.isArray(data) ? data.slice(0, 8) : []);
-      } catch {
+      } catch (err) {
+        console.warn("DAWA autocomplete failed", err);
         setSuggestions([]);
       } finally {
         setLoading(false);
