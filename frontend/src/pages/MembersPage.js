@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { toast } from "sonner";
 export default function MembersPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -132,7 +134,12 @@ export default function MembersPage() {
               </TableRow>
             )}
             {items.map((m) => (
-              <TableRow key={m.id} data-testid={`member-row-${m.id}`}>
+              <TableRow
+                key={m.id}
+                data-testid={`member-row-${m.id}`}
+                onClick={() => navigate(`/medlemmer/${m.id}`)}
+                className="cursor-pointer"
+              >
                 <TableCell className="font-mono text-xs">{m.medlemsnummer}</TableCell>
                 <TableCell>
                   <div className="font-medium text-foreground">{m.navn}</div>

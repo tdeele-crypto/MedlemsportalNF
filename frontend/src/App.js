@@ -6,6 +6,7 @@ import LoginPage from "@/pages/LoginPage";
 import AppLayout from "@/components/AppLayout";
 import DashboardPage from "@/pages/DashboardPage";
 import MembersPage from "@/pages/MembersPage";
+import MemberDetailPage from "@/pages/MemberDetailPage";
 import EventsPage from "@/pages/EventsPage";
 import EventDetailPage from "@/pages/EventDetailPage";
 import QuickCheckInPage from "@/pages/QuickCheckInPage";
@@ -56,6 +57,7 @@ function App() {
               }
             />
             <Route path="medlemmer" element={<MembersPage />} />
+            <Route path="medlemmer/:id" element={<MemberDetailPage />} />
             <Route path="arrangementer" element={<EventsPage />} />
             <Route path="arrangementer/:id" element={<EventDetailPage />} />
             <Route

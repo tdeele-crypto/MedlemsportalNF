@@ -6,404 +6,58 @@ load_dotenv(ROOT_DIR / '.env')
 import os
 import re
 import io
+import csv
 import logging
 import uuid
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Annotated
+from typing import Optional, List
 
-import bcrypt
-import jwt as pyjwt
 import openpyxl
 from bson import ObjectId
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, UploadFile, File, Query, BackgroundTasks
+from fastapi import (
+    FastAPI, APIRouter, HTTPException, Depends, Request, Response,
+    UploadFile, File, Query, BackgroundTasks,
+)
 from fastapi.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, Field, EmailStr, BeforeValidator, ConfigDict
+from fastapi.responses import Response as FastResponse
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from zoneinfo import ZoneInfo
-from fastapi.responses import Response as FastResponse
+
 import email_utils
 import storage_utils
+
+from core.db import client, db
+from core.schemas import (
+    LoginIn, UserOut, UserCreateIn, UserUpdateIn, MemberOut,
+    EventIn, EventOut, ParticipantOut,
+    AddParticipantIn, UpdateParticipantIn, MemberRegistrationOut,
+)
+from core.security import (
+    hash_password, verify_password, create_access_token, decode_access_token,
+    get_current_user, require_admin,
+    check_lockout, record_failed_login, clear_failed_login,
+    JWT_ALGO, JWT_SECRET,
+)
+from core.helpers import (
+    parse_medlemskaber, clean_str, html_escape, format_dk_date,
+)
+from core.serializers import (
+    member_to_out, event_to_out, participant_to_out,
+    resolve_contact, aggregate_event_totals,
+)
 
 
 # ----- Logging -----
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# ----- Mongo -----
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
-
 # ----- App -----
 app = FastAPI(title="Medlems- og Arrangementsapp")
 api = APIRouter(prefix="/api")
 
-JWT_ALGO = "HS256"
-JWT_SECRET = os.environ["JWT_SECRET"]
-
-
-# ----- Helpers -----
-def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-
-
-def verify_password(plain: str, hashed: str) -> bool:
-    try:
-        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
-    except Exception:
-        return False
-
-
-def create_access_token(user_id: str, email: str, role: str) -> str:
-    payload = {
-        "sub": user_id,
-        "email": email,
-        "role": role,
-        "exp": datetime.now(timezone.utc) + timedelta(days=7),
-        "type": "access",
-    }
-    return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
-
-
-async def get_current_user(request: Request) -> dict:
-    token = request.cookies.get("access_token")
-    if not token:
-        auth = request.headers.get("Authorization", "")
-        if auth.startswith("Bearer "):
-            token = auth[7:]
-    if not token:
-        raise HTTPException(status_code=401, detail="Ikke logget ind")
-    try:
-        payload = pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
-        if payload.get("type") != "access":
-            raise HTTPException(status_code=401, detail="Ugyldigt token")
-        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
-        if not user:
-            raise HTTPException(status_code=401, detail="Bruger ikke fundet")
-        return {
-            "id": str(user["_id"]),
-            "email": user["email"],
-            "name": user.get("name", ""),
-            "role": user.get("role", "user"),
-        }
-    except pyjwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Session udløbet")
-    except pyjwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Ugyldigt token")
-
-
-async def require_admin(user: dict = Depends(get_current_user)) -> dict:
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Kun administratorer har adgang")
-    return user
-
-
-# ----- Pydantic Schemas -----
-class LoginIn(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class UserOut(BaseModel):
-    id: str
-    email: EmailStr
-    name: str = ""
-    role: str = "user"
-
-
-class UserCreateIn(BaseModel):
-    email: EmailStr
-    password: str
-    name: str = ""
-    role: str = "user"
-
-
-class UserUpdateIn(BaseModel):
-    name: Optional[str] = None
-    role: Optional[str] = None
-    password: Optional[str] = None
-
-
-class MemberOut(BaseModel):
-    id: str
-    medlemsnummer: str
-    navn: str
-    adresse: str = ""
-    email: str = ""
-    telefon: str = ""
-    medlemstype: str = ""
-    bladstatus: str = ""
-
-
-class EventIn(BaseModel):
-    title: str
-    description: str = ""
-    location: str = ""
-    address: str = ""
-    event_date: Optional[str] = None  # ISO string yyyy-mm-dd or full ISO
-    event_time: Optional[str] = None  # HH:MM
-    registration_deadline: Optional[str] = None  # yyyy-mm-dd
-    contact_member_id: Optional[str] = None  # ObjectId string referencing a member
-    price_member: float = 0
-    price_non_member: float = 0
-    email_on_register: bool = True
-    email_on_paid: bool = True
-    email_on_reminder: bool = True
-    image_path: Optional[str] = None
-
-
-class EventOut(BaseModel):
-    id: str
-    title: str
-    description: str = ""
-    location: str = ""
-    address: str = ""
-    event_date: Optional[str] = None
-    event_time: Optional[str] = None
-    registration_deadline: Optional[str] = None
-    contact_member_id: Optional[str] = None
-    contact_name: str = ""
-    contact_email: str = ""
-    contact_phone: str = ""
-    created_at: str
-    email_on_register: bool = True
-    email_on_paid: bool = True
-    email_on_reminder: bool = True
-    image_path: Optional[str] = None
-    price_member: float = 0
-    price_non_member: float = 0
-    participant_count: int = 0
-    total_attendees: int = 0
-    total_members: int = 0
-    total_non_members: int = 0
-    checked_in_attendees: int = 0
-    expected_revenue: float = 0
-    paid_revenue: float = 0
-    outstanding_revenue: float = 0
-
-
-class ParticipantOut(BaseModel):
-    id: str
-    event_id: str
-    member_id: str
-    medlemsnummer: str
-    navn: str
-    adresse: str = ""
-    email: str = ""
-    telefon: str = ""
-    note: str = ""
-    num_members: int = 1
-    num_non_members: int = 0
-    paid: bool = False
-    checked_in: bool = False
-    reminder_sent: bool = False
-    added_at: str
-
-
-class AddParticipantIn(BaseModel):
-    member_id: str
-    note: str = ""
-    num_members: int = 1
-    num_non_members: int = 0
-
-
-class UpdateParticipantIn(BaseModel):
-    note: Optional[str] = None
-    num_members: Optional[int] = None
-    num_non_members: Optional[int] = None
-    paid: Optional[bool] = None
-    checked_in: Optional[bool] = None
-
-
-# ----- Mongo doc helpers -----
-def member_to_out(doc) -> dict:
-    return {
-        "id": str(doc["_id"]),
-        "medlemsnummer": doc.get("medlemsnummer", ""),
-        "navn": doc.get("navn", ""),
-        "adresse": doc.get("adresse", ""),
-        "email": doc.get("email", ""),
-        "telefon": doc.get("telefon", ""),
-        "medlemstype": doc.get("medlemstype", ""),
-        "bladstatus": doc.get("bladstatus", ""),
-    }
-
-
-def event_to_out(doc, count: int = 0, total_members: int = 0, total_non_members: int = 0,
-                 expected_revenue: float = 0.0, paid_revenue: float = 0.0,
-                 checked_in_attendees: int = 0) -> dict:
-    return {
-        "id": str(doc["_id"]),
-        "title": doc.get("title", ""),
-        "description": doc.get("description", ""),
-        "location": doc.get("location", ""),
-        "address": doc.get("address", ""),
-        "event_date": doc.get("event_date"),
-        "event_time": doc.get("event_time"),
-        "registration_deadline": doc.get("registration_deadline"),
-        "contact_member_id": doc.get("contact_member_id"),
-        "contact_name": doc.get("contact_name", ""),
-        "contact_email": doc.get("contact_email", ""),
-        "contact_phone": doc.get("contact_phone", ""),
-        "created_at": doc.get("created_at", ""),
-        "price_member": float(doc.get("price_member", 0) or 0),
-        "price_non_member": float(doc.get("price_non_member", 0) or 0),
-        "email_on_register": bool(doc.get("email_on_register", True)),
-        "email_on_paid": bool(doc.get("email_on_paid", True)),
-        "email_on_reminder": bool(doc.get("email_on_reminder", True)),
-        "image_path": doc.get("image_path"),
-        "participant_count": count,
-        "total_members": total_members,
-        "total_non_members": total_non_members,
-        "total_attendees": total_members + total_non_members,
-        "checked_in_attendees": checked_in_attendees,
-        "expected_revenue": round(expected_revenue, 2),
-        "paid_revenue": round(paid_revenue, 2),
-        "outstanding_revenue": round(max(0.0, expected_revenue - paid_revenue), 2),
-    }
-
-
-def participant_to_out(doc) -> dict:
-    return {
-        "id": str(doc["_id"]),
-        "event_id": doc.get("event_id", ""),
-        "member_id": doc.get("member_id", ""),
-        "medlemsnummer": doc.get("medlemsnummer", ""),
-        "navn": doc.get("navn", ""),
-        "adresse": doc.get("adresse", ""),
-        "email": doc.get("email", ""),
-        "telefon": doc.get("telefon", ""),
-        "note": doc.get("note", ""),
-        "num_members": int(doc.get("num_members", 1) or 0),
-        "num_non_members": int(doc.get("num_non_members", 0) or 0),
-        "paid": bool(doc.get("paid", False)),
-        "checked_in": bool(doc.get("checked_in", False)),
-        "reminder_sent": bool(doc.get("reminder_sent", False)),
-        "added_at": doc.get("added_at", ""),
-    }
-
-
-async def _resolve_contact(member_id: str | None) -> dict:
-    """Look up contact member by id and return (contact_member_id, contact_name, contact_email, contact_phone)."""
-    out = {"contact_member_id": None, "contact_name": "", "contact_email": "", "contact_phone": ""}
-    if not member_id:
-        return out
-    try:
-        m = await db.members.find_one({"_id": ObjectId(member_id)})
-    except Exception:
-        return out
-    if not m:
-        return out
-    out["contact_member_id"] = str(m["_id"])
-    out["contact_name"] = m.get("navn", "")
-    out["contact_email"] = m.get("email", "")
-    out["contact_phone"] = m.get("telefon", "")
-    return out
-
-
-async def aggregate_event_totals(event_id: str):
-    """Returns (count, total_members, total_non_members, expected_revenue, paid_revenue, checked_in_attendees)."""
-    ev = await db.events.find_one({"_id": ObjectId(event_id)}) if ObjectId.is_valid(event_id) else None
-    price_m = float((ev or {}).get("price_member", 0) or 0)
-    price_nm = float((ev or {}).get("price_non_member", 0) or 0)
-    pipeline = [
-        {"$match": {"event_id": event_id}},
-        {"$group": {
-            "_id": None,
-            "count": {"$sum": 1},
-            "members": {"$sum": {"$ifNull": ["$num_members", 1]}},
-            "non_members": {"$sum": {"$ifNull": ["$num_non_members", 0]}},
-            "paid_members": {"$sum": {"$cond": [{"$eq": ["$paid", True]}, {"$ifNull": ["$num_members", 1]}, 0]}},
-            "paid_non_members": {"$sum": {"$cond": [{"$eq": ["$paid", True]}, {"$ifNull": ["$num_non_members", 0]}, 0]}},
-            "checked_in": {"$sum": {"$cond": [{"$eq": ["$checked_in", True]},
-                                              {"$add": [{"$ifNull": ["$num_members", 1]}, {"$ifNull": ["$num_non_members", 0]}]},
-                                              0]}},
-        }},
-    ]
-    agg = await db.participants.aggregate(pipeline).to_list(1)
-    if agg:
-        a = agg[0]
-        members = int(a["members"])
-        non_members = int(a["non_members"])
-        expected = members * price_m + non_members * price_nm
-        paid = int(a["paid_members"]) * price_m + int(a["paid_non_members"]) * price_nm
-        checked_in = int(a.get("checked_in", 0) or 0)
-        return a["count"], members, non_members, expected, paid, checked_in
-    return 0, 0, 0, 0.0, 0.0, 0
-
-
-# ----- Excel parsing -----
-MEDLEMSTYPER = [
-    "Livsvarigt medlemskab",
-    "Medlemskab uden opkrævning",
-    "Alm. medlemskab",
-]
-
-
-def parse_medlemskaber(text: str):
-    if not text:
-        return ("", "")
-    t = str(text).lower()
-    medlemstype = ""
-    for mt in MEDLEMSTYPER:
-        if mt.lower() in t:
-            medlemstype = mt
-            break
-    bladstatus = ""
-    if "medlemsblad med posten" in t or "med posten" in t:
-        bladstatus = "Medlemsblad med posten"
-    elif "medlemsblad på e-mail" in t or "på e-mail" in t or "paa e-mail" in t or "pa e-mail" in t:
-        bladstatus = "Medlemsblad på e-mail"
-    return (medlemstype, bladstatus)
-
-
-def clean_str(v) -> str:
-    if v is None:
-        return ""
-    if isinstance(v, float):
-        if v.is_integer():
-            return str(int(v))
-        return str(v)
-    return str(v).strip()
-
 
 # ----- Auth Endpoints -----
-MAX_LOGIN_ATTEMPTS = 5
-LOCKOUT_MINUTES = 15
-
-
-async def check_lockout(identifier: str):
-    rec = await db.login_attempts.find_one({"_id": identifier})
-    if not rec:
-        return
-    locked_until = rec.get("locked_until")
-    if locked_until:
-        try:
-            lu = datetime.fromisoformat(locked_until)
-        except Exception:
-            return
-        if lu > datetime.now(timezone.utc):
-            mins = max(1, int((lu - datetime.now(timezone.utc)).total_seconds() // 60) + 1)
-            raise HTTPException(status_code=429, detail=f"For mange mislykkede forsøg. Prøv igen om {mins} min.")
-
-
-async def record_failed_login(identifier: str):
-    now = datetime.now(timezone.utc)
-    rec = await db.login_attempts.find_one({"_id": identifier})
-    count = (rec.get("count", 0) if rec else 0) + 1
-    update = {"count": count, "last_at": now.isoformat()}
-    if count >= MAX_LOGIN_ATTEMPTS:
-        update["locked_until"] = (now + timedelta(minutes=LOCKOUT_MINUTES)).isoformat()
-        update["count"] = 0
-    await db.login_attempts.update_one({"_id": identifier}, {"$set": update}, upsert=True)
-
-
-async def clear_failed_login(identifier: str):
-    await db.login_attempts.delete_one({"_id": identifier})
-
-
 @api.post("/auth/login")
 async def login(payload: LoginIn, request: Request, response: Response):
     email = payload.email.lower().strip()
@@ -443,15 +97,10 @@ async def me(user: dict = Depends(get_current_user)):
 @api.get("/users", response_model=List[UserOut])
 async def list_users(_admin: dict = Depends(require_admin)):
     cursor = db.users.find({}).sort("email", 1)
-    out = []
-    async for u in cursor:
-        out.append({
-            "id": str(u["_id"]),
-            "email": u["email"],
-            "name": u.get("name", ""),
-            "role": u.get("role", "user"),
-        })
-    return out
+    return [
+        {"id": str(u["_id"]), "email": u["email"], "name": u.get("name", ""), "role": u.get("role", "user")}
+        async for u in cursor
+    ]
 
 
 @api.post("/users", response_model=UserOut)
@@ -510,15 +159,10 @@ async def list_members(
     if q.strip():
         pattern = re.escape(q.strip())
         regex = {"$regex": pattern, "$options": "i"}
-        filt = {
-            "$or": [
-                {"medlemsnummer": regex},
-                {"navn": regex},
-                {"adresse": regex},
-                {"telefon": regex},
-                {"email": regex},
-            ]
-        }
+        filt = {"$or": [
+            {"medlemsnummer": regex}, {"navn": regex}, {"adresse": regex},
+            {"telefon": regex}, {"email": regex},
+        ]}
     total = await db.members.count_documents(filt)
     cursor = db.members.find(filt).sort("navn", 1).skip(skip).limit(limit)
     items = [member_to_out(d) async for d in cursor]
@@ -527,10 +171,67 @@ async def list_members(
 
 @api.get("/members/{member_id}", response_model=MemberOut)
 async def get_member(member_id: str, _user: dict = Depends(get_current_user)):
+    if not ObjectId.is_valid(member_id):
+        raise HTTPException(status_code=404, detail="Medlem ikke fundet")
     doc = await db.members.find_one({"_id": ObjectId(member_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Medlem ikke fundet")
     return member_to_out(doc)
+
+
+@api.get("/members/{member_id}/registrations", response_model=List[MemberRegistrationOut])
+async def get_member_registrations(member_id: str, _user: dict = Depends(get_current_user)):
+    """Return all event registrations for a single member (history)."""
+    if not ObjectId.is_valid(member_id):
+        raise HTTPException(status_code=404, detail="Medlem ikke fundet")
+    member = await db.members.find_one({"_id": ObjectId(member_id)})
+    if not member:
+        raise HTTPException(status_code=404, detail="Medlem ikke fundet")
+    out: list[dict] = []
+    cursor = db.participants.find({"member_id": str(member["_id"])}).sort("added_at", -1)
+    async for p in cursor:
+        ev_id = p.get("event_id", "")
+        ev = None
+        if ev_id and ObjectId.is_valid(ev_id):
+            ev = await db.events.find_one({"_id": ObjectId(ev_id)})
+        out.append({
+            "participant_id": str(p["_id"]),
+            "event_id": ev_id,
+            "event_title": (ev or {}).get("title", "(slettet arrangement)"),
+            "event_date": (ev or {}).get("event_date"),
+            "event_time": (ev or {}).get("event_time"),
+            "location": (ev or {}).get("location", ""),
+            "address": (ev or {}).get("address", ""),
+            "num_members": int(p.get("num_members", 1) or 0),
+            "num_non_members": int(p.get("num_non_members", 0) or 0),
+            "paid": bool(p.get("paid", False)),
+            "checked_in": bool(p.get("checked_in", False)),
+            "note": p.get("note", ""),
+            "added_at": p.get("added_at", ""),
+        })
+    return out
+
+
+def _parse_excel_row(row) -> dict | None:
+    """Map one Excel row (tuple) → member doc or None to skip."""
+    if not row or all(v is None for v in row):
+        return None
+    medlemsnummer = clean_str(row[0]) if len(row) > 0 else ""
+    if not medlemsnummer:
+        return None
+    medlemskaber = clean_str(row[5]) if len(row) > 5 else ""
+    medlemstype, bladstatus = parse_medlemskaber(medlemskaber)
+    return {
+        "medlemsnummer": medlemsnummer,
+        "navn": clean_str(row[1]) if len(row) > 1 else "",
+        "adresse": clean_str(row[2]) if len(row) > 2 else "",
+        "email": (clean_str(row[3]) if len(row) > 3 else "").lower(),
+        "telefon": clean_str(row[4]) if len(row) > 4 else "",
+        "medlemstype": medlemstype,
+        "bladstatus": bladstatus,
+        "raw_medlemskaber": medlemskaber,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @api.post("/members/import")
@@ -547,32 +248,11 @@ async def import_members(file: UploadFile = File(...), _admin: dict = Depends(re
     inserted, updated, skipped = 0, 0, 0
     rows = list(ws.iter_rows(min_row=2, values_only=True))
     for row in rows:
-        if not row or all(v is None for v in row):
+        doc = _parse_excel_row(row)
+        if doc is None:
             skipped += 1
             continue
-        # Layout: Medlemsnummer | Navn | Adresse (combined) | E-mail | Mobilnummer | Medlemskaber
-        medlemsnummer = clean_str(row[0]) if len(row) > 0 else ""
-        navn = clean_str(row[1]) if len(row) > 1 else ""
-        adresse = clean_str(row[2]) if len(row) > 2 else ""
-        email = clean_str(row[3]) if len(row) > 3 else ""
-        telefon = clean_str(row[4]) if len(row) > 4 else ""
-        medlemskaber = clean_str(row[5]) if len(row) > 5 else ""
-        if not medlemsnummer:
-            skipped += 1
-            continue
-        medlemstype, bladstatus = parse_medlemskaber(medlemskaber)
-        doc = {
-            "medlemsnummer": medlemsnummer,
-            "navn": navn,
-            "adresse": adresse,
-            "email": email.lower(),
-            "telefon": telefon,
-            "medlemstype": medlemstype,
-            "bladstatus": bladstatus,
-            "raw_medlemskaber": medlemskaber,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
-        existing = await db.members.find_one({"medlemsnummer": medlemsnummer})
+        existing = await db.members.find_one({"medlemsnummer": doc["medlemsnummer"]})
         if existing:
             await db.members.update_one({"_id": existing["_id"]}, {"$set": doc})
             updated += 1
@@ -588,15 +268,13 @@ async def import_members(file: UploadFile = File(...), _admin: dict = Depends(re
 async def list_events(_user: dict = Depends(get_current_user)):
     items = []
     async for ev in db.events.find({}).sort("event_date", -1):
-        count, members, non_members, expected, paid, checked_in = await aggregate_event_totals(str(ev["_id"]))
+        count, members, non_members, expected, paid, checked_in = await aggregate_event_totals(db, str(ev["_id"]))
         items.append(event_to_out(ev, count, members, non_members, expected, paid, checked_in))
     return items
 
 
-@api.post("/events", response_model=EventOut)
-async def create_event(payload: EventIn, _admin: dict = Depends(require_admin)):
-    contact = await _resolve_contact(payload.contact_member_id)
-    doc = {
+def _event_doc_from_payload(payload: EventIn, contact: dict) -> dict:
+    return {
         "title": payload.title,
         "description": payload.description or "",
         "location": payload.location or "",
@@ -611,8 +289,14 @@ async def create_event(payload: EventIn, _admin: dict = Depends(require_admin)):
         "email_on_reminder": bool(payload.email_on_reminder),
         "image_path": payload.image_path,
         **contact,
-        "created_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@api.post("/events", response_model=EventOut)
+async def create_event(payload: EventIn, _admin: dict = Depends(require_admin)):
+    contact = await resolve_contact(db, payload.contact_member_id)
+    doc = {**_event_doc_from_payload(payload, contact),
+           "created_at": datetime.now(timezone.utc).isoformat()}
     res = await db.events.insert_one(doc)
     doc["_id"] = res.inserted_id
     return event_to_out(doc, 0, 0, 0, 0.0, 0.0, 0)
@@ -620,42 +304,33 @@ async def create_event(payload: EventIn, _admin: dict = Depends(require_admin)):
 
 @api.get("/events/{event_id}", response_model=EventOut)
 async def get_event(event_id: str, _user: dict = Depends(get_current_user)):
+    if not ObjectId.is_valid(event_id):
+        raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
     if not ev:
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
-    count, members, non_members, expected, paid, checked_in = await aggregate_event_totals(event_id)
+    count, members, non_members, expected, paid, checked_in = await aggregate_event_totals(db, event_id)
     return event_to_out(ev, count, members, non_members, expected, paid, checked_in)
 
 
 @api.patch("/events/{event_id}", response_model=EventOut)
 async def update_event(event_id: str, payload: EventIn, _admin: dict = Depends(require_admin)):
-    contact = await _resolve_contact(payload.contact_member_id)
-    update = {
-        "title": payload.title,
-        "description": payload.description or "",
-        "location": payload.location or "",
-        "address": payload.address or "",
-        "event_date": payload.event_date,
-        "event_time": payload.event_time,
-        "registration_deadline": payload.registration_deadline,
-        "price_member": float(payload.price_member or 0),
-        "price_non_member": float(payload.price_non_member or 0),
-        "email_on_register": bool(payload.email_on_register),
-        "email_on_paid": bool(payload.email_on_paid),
-        "email_on_reminder": bool(payload.email_on_reminder),
-        "image_path": payload.image_path,
-        **contact,
-    }
+    if not ObjectId.is_valid(event_id):
+        raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
+    contact = await resolve_contact(db, payload.contact_member_id)
+    update = _event_doc_from_payload(payload, contact)
     await db.events.update_one({"_id": ObjectId(event_id)}, {"$set": update})
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
     if not ev:
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
-    count, members, non_members, expected, paid, checked_in = await aggregate_event_totals(event_id)
+    count, members, non_members, expected, paid, checked_in = await aggregate_event_totals(db, event_id)
     return event_to_out(ev, count, members, non_members, expected, paid, checked_in)
 
 
 @api.delete("/events/{event_id}")
 async def delete_event(event_id: str, _admin: dict = Depends(require_admin)):
+    if not ObjectId.is_valid(event_id):
+        raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
     await db.participants.delete_many({"event_id": event_id})
     res = await db.events.delete_one({"_id": ObjectId(event_id)})
     if not res.deleted_count:
@@ -671,10 +346,17 @@ async def list_participants(event_id: str, _user: dict = Depends(get_current_use
 
 
 @api.post("/events/{event_id}/participants", response_model=ParticipantOut)
-async def add_participant(event_id: str, payload: AddParticipantIn, background: BackgroundTasks, _admin: dict = Depends(require_admin)):
+async def add_participant(
+    event_id: str, payload: AddParticipantIn, background: BackgroundTasks,
+    _admin: dict = Depends(require_admin),
+):
+    if not ObjectId.is_valid(event_id):
+        raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
     if not ev:
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
+    if not ObjectId.is_valid(payload.member_id):
+        raise HTTPException(status_code=404, detail="Medlem ikke fundet")
     member = await db.members.find_one({"_id": ObjectId(payload.member_id)})
     if not member:
         raise HTTPException(status_code=404, detail="Medlem ikke fundet")
@@ -710,12 +392,8 @@ async def add_participant(event_id: str, payload: AddParticipantIn, background: 
     return participant_to_out(doc)
 
 
-@api.patch("/events/{event_id}/participants/{participant_id}", response_model=ParticipantOut)
-async def update_participant(event_id: str, participant_id: str, payload: UpdateParticipantIn, background: BackgroundTasks, _admin: dict = Depends(require_admin)):
-    existing = await db.participants.find_one({"_id": ObjectId(participant_id), "event_id": event_id})
-    if not existing:
-        raise HTTPException(status_code=404, detail="Tilmelding ikke fundet")
-    update = {}
+def _build_participant_update(payload: UpdateParticipantIn) -> dict:
+    update: dict = {}
     if payload.note is not None:
         update["note"] = payload.note
     if payload.num_members is not None:
@@ -726,6 +404,22 @@ async def update_participant(event_id: str, participant_id: str, payload: Update
         update["paid"] = bool(payload.paid)
     if payload.checked_in is not None:
         update["checked_in"] = bool(payload.checked_in)
+    return update
+
+
+@api.patch("/events/{event_id}/participants/{participant_id}", response_model=ParticipantOut)
+async def update_participant(
+    event_id: str, participant_id: str, payload: UpdateParticipantIn,
+    background: BackgroundTasks, _admin: dict = Depends(require_admin),
+):
+    if not (ObjectId.is_valid(event_id) and ObjectId.is_valid(participant_id)):
+        raise HTTPException(status_code=404, detail="Tilmelding ikke fundet")
+    existing = await db.participants.find_one(
+        {"_id": ObjectId(participant_id), "event_id": event_id}
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="Tilmelding ikke fundet")
+    update = _build_participant_update(payload)
     if update:
         await db.participants.update_one(
             {"_id": ObjectId(participant_id), "event_id": event_id},
@@ -743,6 +437,8 @@ async def update_participant(event_id: str, participant_id: str, payload: Update
 
 @api.delete("/events/{event_id}/participants/{participant_id}")
 async def remove_participant(event_id: str, participant_id: str, _admin: dict = Depends(require_admin)):
+    if not (ObjectId.is_valid(event_id) and ObjectId.is_valid(participant_id)):
+        raise HTTPException(status_code=404, detail="Tilmelding ikke fundet")
     res = await db.participants.delete_one({"_id": ObjectId(participant_id), "event_id": event_id})
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Tilmelding ikke fundet")
@@ -752,18 +448,17 @@ async def remove_participant(event_id: str, participant_id: str, _admin: dict = 
 @api.get("/events/{event_id}/participants/export")
 async def export_participants_csv(event_id: str, _user: dict = Depends(get_current_user)):
     """CSV export with check-in column for printing."""
+    if not ObjectId.is_valid(event_id):
+        raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
     if not ev:
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
-    from fastapi.responses import Response as _Response
-    import csv as _csv
-    import io as _io
-    buf = _io.StringIO()
+    buf = io.StringIO()
     buf.write("\ufeff")  # BOM for Excel
-    writer = _csv.writer(buf, delimiter=";")
+    writer = csv.writer(buf, delimiter=";")
     writer.writerow([
         "Medlemsnr", "Navn", "Adresse", "Email", "Telefon",
-        "Antal medl.", "Antal ikke-medl.", "Antal i alt", "Betalt", "Note", "Mødt op"
+        "Antal medl.", "Antal ikke-medl.", "Antal i alt", "Betalt", "Note", "Mødt op",
     ])
     cursor = db.participants.find({"event_id": event_id}).sort("navn", 1)
     async for p in cursor:
@@ -771,21 +466,16 @@ async def export_participants_csv(event_id: str, _user: dict = Depends(get_curre
         nnm = int(p.get("num_non_members", 0) or 0)
         addr = str(p.get("adresse", "")).replace("\n", ", ")
         writer.writerow([
-            p.get("medlemsnummer", ""),
-            p.get("navn", ""),
-            addr,
-            p.get("email", ""),
-            p.get("telefon", ""),
-            nm,
-            nnm,
-            nm + nnm,
+            p.get("medlemsnummer", ""), p.get("navn", ""), addr,
+            p.get("email", ""), p.get("telefon", ""),
+            nm, nnm, nm + nnm,
             "Ja" if p.get("paid") else "Nej",
             p.get("note", ""),
             "Ja" if p.get("checked_in") else "",
         ])
     title = (ev.get("title") or "arrangement").replace(" ", "_")
     filename = f"deltagere_{title}_{event_id}.csv"
-    return _Response(
+    return FastResponse(
         content=buf.getvalue(),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
@@ -816,9 +506,8 @@ async def share_event_image(event_id: str):
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
     if not ev or not ev.get("image_path"):
         raise HTTPException(status_code=404, detail="Intet billede")
-    path = ev["image_path"]
     try:
-        data, content_type = storage_utils.get_object(path)
+        data, content_type = storage_utils.get_object(ev["image_path"])
     except Exception as e:
         logger.error("Public image fetch failed: %s", e)
         raise HTTPException(status_code=500, detail="Kunne ikke hente billede")
@@ -826,26 +515,38 @@ async def share_event_image(event_id: str):
                         headers={"Cache-Control": "public, max-age=300"})
 
 
-def _html_escape(s) -> str:
-    if s is None:
-        return ""
-    return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            .replace('"', "&quot;").replace("'", "&#39;"))
+def _resolve_public_base_url(request: Request) -> str:
+    base_url = str(request.base_url).rstrip("/")
+    fwd_host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    fwd_proto = request.headers.get("x-forwarded-proto", "https")
+    if fwd_host and "preview.emergentagent" in fwd_host:
+        base_url = f"{fwd_proto}://{fwd_host}"
+    return base_url
 
 
-def _format_dk_date(date_str: str | None, time_str: str | None) -> str:
-    if not date_str:
-        return ""
-    try:
-        d = datetime.fromisoformat(date_str.replace("Z", "+00:00").split("T")[0])
-        DK_DAYS = ["mandag","tirsdag","onsdag","torsdag","fredag","lørdag","søndag"]
-        DK_MONTHS = ["januar","februar","marts","april","maj","juni","juli","august","september","oktober","november","december"]
-        s = f"{DK_DAYS[d.weekday()]} d. {d.day}. {DK_MONTHS[d.month - 1]} {d.year}"
-        if time_str:
-            s += f" kl. {time_str}"
-        return s
-    except Exception:
-        return date_str
+def _build_share_description(ev: dict, where_bits: list[str], date_str: str) -> str:
+    parts: list[str] = []
+    if date_str:
+        parts.append(date_str)
+    if ev.get("registration_deadline"):
+        parts.append(f"⏳ Tilmeldingsfrist: {format_dk_date(ev.get('registration_deadline'))}")
+    if where_bits:
+        parts.append(" · ".join(where_bits))
+    if ev.get("description"):
+        parts.append(ev["description"])
+    if (ev.get("price_member") or 0) > 0 or (ev.get("price_non_member") or 0) > 0:
+        parts.append(
+            f"Pris: {ev.get('price_member', 0):g} kr. medlem / "
+            f"{ev.get('price_non_member', 0):g} kr. ikke-medlem"
+        )
+    if ev.get("contact_name"):
+        bits = [ev["contact_name"]]
+        if ev.get("contact_email"):
+            bits.append(ev["contact_email"])
+        if ev.get("contact_phone"):
+            bits.append(ev["contact_phone"])
+        parts.append("Tilmelding til: " + " · ".join(bits))
+    return "\n\n".join(parts) or ev.get("title", "")
 
 
 @api.get("/share/event/{event_id}")
@@ -858,60 +559,45 @@ async def share_event_page(event_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
 
     title = ev.get("title", "Arrangement")
-    description_parts = []
-    date_str = _format_dk_date(ev.get("event_date"), ev.get("event_time"))
-    if date_str:
-        description_parts.append(date_str)
-    if ev.get("registration_deadline"):
-        deadline_str = _format_dk_date(ev.get("registration_deadline"), None)
-        description_parts.append(f"⏳ Tilmeldingsfrist: {deadline_str}")
-    where_bits = []
-    if ev.get("location"):
-        where_bits.append(ev["location"])
-    if ev.get("address"):
-        where_bits.append(ev["address"])
-    if where_bits:
-        description_parts.append(" · ".join(where_bits))
-    if ev.get("description"):
-        description_parts.append(ev["description"])
-    if (ev.get("price_member") or 0) > 0 or (ev.get("price_non_member") or 0) > 0:
-        description_parts.append(
-            f"Pris: {ev.get('price_member', 0):g} kr. medlem / {ev.get('price_non_member', 0):g} kr. ikke-medlem"
-        )
-    if ev.get("contact_name"):
-        contact_bits = [ev["contact_name"]]
-        if ev.get("contact_email"):
-            contact_bits.append(ev["contact_email"])
-        if ev.get("contact_phone"):
-            contact_bits.append(ev["contact_phone"])
-        description_parts.append("Tilmelding til: " + " · ".join(contact_bits))
-    description = "\n\n".join(description_parts) or title
+    date_str = format_dk_date(ev.get("event_date"), ev.get("event_time"))
+    where_bits = [b for b in [ev.get("location"), ev.get("address")] if b]
+    description = _build_share_description(ev, where_bits, date_str)
 
-    base_url = str(request.base_url).rstrip("/")
-    # Behind the Kubernetes ingress, the public host is in X-Forwarded-* headers.
-    fwd_host = request.headers.get("x-forwarded-host") or request.headers.get("host")
-    fwd_proto = request.headers.get("x-forwarded-proto", "https")
-    if fwd_host and "preview.emergentagent" in fwd_host:
-        base_url = f"{fwd_proto}://{fwd_host}"
+    base_url = _resolve_public_base_url(request)
     page_url = f"{base_url}/api/share/event/{event_id}"
     image_url = f"{base_url}/api/share/event/{event_id}/image" if ev.get("image_path") else ""
+
+    deadline_html = (
+        f'<p class="meta">⏳ Tilmeldingsfrist: '
+        f'{html_escape(format_dk_date(ev.get("registration_deadline")))}</p>'
+        if ev.get("registration_deadline") else ""
+    )
+    contact_html = ""
+    if ev.get("contact_name"):
+        contact_html = (
+            f'<p class="meta"><strong>Tilmelding til:</strong> '
+            f'{html_escape(ev.get("contact_name", ""))}'
+            + (f' · {html_escape(ev.get("contact_email", ""))}' if ev.get("contact_email") else "")
+            + (f' · {html_escape(ev.get("contact_phone", ""))}' if ev.get("contact_phone") else "")
+            + "</p>"
+        )
 
     html = f"""<!doctype html>
 <html lang="da">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{_html_escape(title)}</title>
+  <title>{html_escape(title)}</title>
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="Medlemsportal">
-  <meta property="og:title" content="{_html_escape(title)}">
-  <meta property="og:description" content="{_html_escape(description)}">
+  <meta property="og:title" content="{html_escape(title)}">
+  <meta property="og:description" content="{html_escape(description)}">
   <meta property="og:url" content="{page_url}">
   {f'<meta property="og:image" content="{image_url}">' if image_url else ''}
   {f'<meta property="og:image:secure_url" content="{image_url}">' if image_url else ''}
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="{_html_escape(title)}">
-  <meta name="twitter:description" content="{_html_escape(description)}">
+  <meta name="twitter:title" content="{html_escape(title)}">
+  <meta name="twitter:description" content="{html_escape(description)}">
   {f'<meta name="twitter:image" content="{image_url}">' if image_url else ''}
   <style>
     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:#F5F6F1; color:#1B1F1B; margin:0; padding:24px; }}
@@ -927,12 +613,12 @@ async def share_event_page(event_id: str, request: Request):
   <div class="card">
     {f'<img src="{image_url}" alt="">' if image_url else ''}
     <div class="body">
-      <h1>{_html_escape(title)}</h1>
-      <p class="meta">{_html_escape(date_str)}</p>
-      {f'<p class="meta">⏳ Tilmeldingsfrist: {_html_escape(_format_dk_date(ev.get("registration_deadline"), None))}</p>' if ev.get("registration_deadline") else ''}
-      <p class="meta">{_html_escape(' · '.join(where_bits))}</p>
-      <p>{_html_escape(ev.get('description', ''))}</p>
-      {f'<p class="meta"><strong>Tilmelding til:</strong> {_html_escape(ev.get("contact_name", ""))}{(" · " + _html_escape(ev.get("contact_email", ""))) if ev.get("contact_email") else ""}{(" · " + _html_escape(ev.get("contact_phone", ""))) if ev.get("contact_phone") else ""}</p>' if ev.get("contact_name") else ''}
+      <h1>{html_escape(title)}</h1>
+      <p class="meta">{html_escape(date_str)}</p>
+      {deadline_html}
+      <p class="meta">{html_escape(' · '.join(where_bits))}</p>
+      <p>{html_escape(ev.get('description', ''))}</p>
+      {contact_html}
     </div>
   </div>
 </body>
@@ -948,6 +634,7 @@ async def facebook_config(_user: dict = Depends(get_current_user)):
 # ----- Image upload (event covers) -----
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
+_EXT_MAP = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
 
 
 @api.post("/uploads/image")
@@ -959,8 +646,7 @@ async def upload_image(file: UploadFile = File(...), _admin: dict = Depends(requ
         raise HTTPException(status_code=400, detail="Billede er for stort (max 10 MB)")
     if len(data) == 0:
         raise HTTPException(status_code=400, detail="Tom fil")
-    ext_map = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
-    ext = ext_map.get(file.content_type, "bin")
+    ext = _EXT_MAP.get(file.content_type, "bin")
     app_name = os.environ.get("APP_NAME", "medlemsportal")
     path = f"{app_name}/events/{uuid.uuid4()}.{ext}"
     try:
@@ -980,27 +666,23 @@ async def upload_image(file: UploadFile = File(...), _admin: dict = Depends(requ
     return {"path": stored_path, "size": len(data), "content_type": file.content_type}
 
 
+def _authorize_file_request(request: Request, auth: Optional[str]) -> None:
+    """Authorize a /files/{path} request via cookie, Bearer header, or ?auth= query."""
+    if request.cookies.get("access_token") or request.headers.get("Authorization"):
+        # Cookie/Bearer present — fall through to get_current_user style validation
+        return
+    if not auth:
+        raise HTTPException(status_code=401, detail="Ikke logget ind")
+    decode_access_token(auth)  # raises if invalid
+
+
 @api.get("/files/{path:path}")
 async def get_file(path: str, request: Request, auth: Optional[str] = Query(None)):
     # Allow auth via cookie, Bearer header, or ?auth= query param (for <img src>)
-    if not request.cookies.get("access_token") and not request.headers.get("Authorization") and auth:
-        # Synthesize a fake Authorization header by re-invoking get_current_user logic
-        pass
-    try:
-        if auth and not request.cookies.get("access_token") and not request.headers.get("Authorization"):
-            # decode the token directly
-            try:
-                payload = pyjwt.decode(auth, JWT_SECRET, algorithms=[JWT_ALGO])
-                if payload.get("type") != "access":
-                    raise HTTPException(status_code=401, detail="Ugyldigt token")
-            except pyjwt.ExpiredSignatureError:
-                raise HTTPException(status_code=401, detail="Session udløbet")
-            except pyjwt.InvalidTokenError:
-                raise HTTPException(status_code=401, detail="Ugyldigt token")
-        else:
-            await get_current_user(request)
-    except HTTPException:
-        raise
+    if request.cookies.get("access_token") or request.headers.get("Authorization"):
+        await get_current_user(request)
+    else:
+        _authorize_file_request(request, auth)
     record = await db.files.find_one({"storage_path": path, "is_deleted": False})
     if not record:
         raise HTTPException(status_code=404, detail="Fil ikke fundet")
@@ -1009,8 +691,11 @@ async def get_file(path: str, request: Request, auth: Optional[str] = Query(None
     except Exception as e:
         logger.error("File download failed: %s", e)
         raise HTTPException(status_code=500, detail="Kunne ikke hente fil")
-    return FastResponse(content=data, media_type=record.get("content_type", content_type),
-                        headers={"Cache-Control": "public, max-age=3600"})
+    return FastResponse(
+        content=data,
+        media_type=record.get("content_type", content_type),
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 # ----- Startup -----
@@ -1019,6 +704,7 @@ async def on_startup():
     await db.users.create_index("email", unique=True)
     await db.members.create_index("medlemsnummer", unique=True)
     await db.participants.create_index([("event_id", 1)])
+    await db.participants.create_index([("member_id", 1)])
     # Init object storage
     try:
         storage_utils.init_storage()
@@ -1054,11 +740,9 @@ scheduler: Optional[AsyncIOScheduler] = None
 
 
 async def send_reminders_for_date(target_date_str: str) -> dict:
-    """Find all events on target_date_str (yyyy-mm-dd) and email reminders to participants
-    who have not yet received one. Returns counters."""
-    sent = 0
-    skipped = 0
-    failed = 0
+    """Find all events on target_date_str (yyyy-mm-dd) and email reminders to
+    participants who have not yet received one. Returns counters."""
+    sent, skipped, failed = 0, 0, 0
     events_cursor = db.events.find({"event_date": target_date_str})
     async for ev in events_cursor:
         if not bool(ev.get("email_on_reminder", True)):
@@ -1072,22 +756,27 @@ async def send_reminders_for_date(target_date_str: str) -> dict:
             if ok:
                 await db.participants.update_one(
                     {"_id": p["_id"]},
-                    {"$set": {"reminder_sent": True, "reminder_sent_at": datetime.now(timezone.utc).isoformat()}},
+                    {"$set": {"reminder_sent": True,
+                              "reminder_sent_at": datetime.now(timezone.utc).isoformat()}},
                 )
                 sent += 1
             else:
                 failed += 1
-    logger.info("Reminder run for %s: sent=%d skipped=%d failed=%d", target_date_str, sent, skipped, failed)
+    logger.info("Reminder run for %s: sent=%d skipped=%d failed=%d",
+                target_date_str, sent, skipped, failed)
     return {"sent": sent, "skipped": skipped, "failed": failed}
+
+
+def _reminder_tz() -> ZoneInfo:
+    try:
+        return ZoneInfo(os.environ.get("REMINDER_TIMEZONE", "Europe/Copenhagen"))
+    except Exception:
+        return ZoneInfo("Europe/Copenhagen")
 
 
 async def _reminder_job():
     """Daily job: send reminders to participants of events happening in exactly 2 days."""
-    try:
-        tz = ZoneInfo(os.environ.get("REMINDER_TIMEZONE", "Europe/Copenhagen"))
-    except Exception:
-        tz = ZoneInfo("Europe/Copenhagen")
-    target = (datetime.now(tz).date() + timedelta(days=2)).isoformat()
+    target = (datetime.now(_reminder_tz()).date() + timedelta(days=2)).isoformat()
     await send_reminders_for_date(target)
 
 
@@ -1095,10 +784,7 @@ def _start_scheduler():
     global scheduler
     if scheduler is not None:
         return
-    try:
-        tz = ZoneInfo(os.environ.get("REMINDER_TIMEZONE", "Europe/Copenhagen"))
-    except Exception:
-        tz = ZoneInfo("Europe/Copenhagen")
+    tz = _reminder_tz()
     hour = int(os.environ.get("REMINDER_HOUR", "9") or "9")
     scheduler = AsyncIOScheduler(timezone=tz)
     scheduler.add_job(
@@ -1116,11 +802,7 @@ def _start_scheduler():
 async def admin_run_reminders(target_date: Optional[str] = None, _admin: dict = Depends(require_admin)):
     """Manually trigger reminders. If target_date is omitted, defaults to today+2 days."""
     if not target_date:
-        try:
-            tz = ZoneInfo(os.environ.get("REMINDER_TIMEZONE", "Europe/Copenhagen"))
-        except Exception:
-            tz = ZoneInfo("Europe/Copenhagen")
-        target_date = (datetime.now(tz).date() + timedelta(days=2)).isoformat()
+        target_date = (datetime.now(_reminder_tz()).date() + timedelta(days=2)).isoformat()
     return await send_reminders_for_date(target_date)
 
 
@@ -1141,7 +823,6 @@ app.include_router(api)
 # CORS - allow credentials; preview origin is from FRONTEND env
 _cors_origins = os.environ.get("CORS_ORIGINS", "*")
 if _cors_origins == "*":
-    # Use regex to allow all origins with credentials (preview URL varies)
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=".*",

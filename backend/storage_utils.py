@@ -1,77 +1,67 @@
-"""Object storage helper using Emergent storage API."""
+"""Object storage helper — local filesystem.
+
+Files are stored under UPLOAD_DIR (default: /app/backend/uploads).
+For production deployment to your own VPS, set UPLOAD_DIR to a path
+OUTSIDE your git repo so uploads aren't committed (e.g. /var/www/medlemsportal/uploads).
+"""
 import os
 import logging
-import requests
+import mimetypes
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
-EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
-APP_NAME = os.environ.get("APP_NAME", "medlemsportal")
-
-_storage_key: str | None = None
+# Resolve upload directory. Defaults to ./uploads next to this file.
+_default_dir = Path(__file__).parent / "uploads"
+UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", str(_default_dir))).resolve()
 
 
-def init_storage() -> str | None:
-    global _storage_key
-    if _storage_key:
-        return _storage_key
-    if not EMERGENT_KEY:
-        logger.warning("EMERGENT_LLM_KEY not set — object storage disabled")
-        return None
+def init_storage() -> str:
+    """Ensure the upload directory exists. Returns the absolute path."""
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info("Local storage initialized at %s", UPLOAD_DIR)
+    return str(UPLOAD_DIR)
+
+
+def _safe_path(path: str) -> Path:
+    """Resolve `path` inside UPLOAD_DIR; reject traversal attempts."""
+    if not path or path.startswith("/") or ".." in path.split("/"):
+        raise ValueError("Invalid storage path")
+    full = (UPLOAD_DIR / path).resolve()
+    # Ensure resolved path stays within UPLOAD_DIR
     try:
-        resp = requests.post(f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30)
-        resp.raise_for_status()
-        _storage_key = resp.json()["storage_key"]
-        logger.info("Object storage initialized")
-        return _storage_key
-    except Exception as e:
-        logger.error("Storage init failed: %s", e)
-        return None
+        full.relative_to(UPLOAD_DIR)
+    except ValueError:
+        raise ValueError("Path escapes upload directory")
+    return full
 
 
 def put_object(path: str, data: bytes, content_type: str) -> dict:
-    key = init_storage()
-    if not key:
-        raise RuntimeError("Storage not initialized")
-    resp = requests.put(
-        f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key, "Content-Type": content_type},
-        data=data, timeout=120,
-    )
-    if resp.status_code == 403:
-        # Re-init and retry once
-        global _storage_key
-        _storage_key = None
-        key = init_storage()
-        if not key:
-            raise RuntimeError("Storage re-init failed")
-        resp = requests.put(
-            f"{STORAGE_URL}/objects/{path}",
-            headers={"X-Storage-Key": key, "Content-Type": content_type},
-            data=data, timeout=120,
-        )
-    resp.raise_for_status()
-    return resp.json()
+    """Write bytes to UPLOAD_DIR/path. Returns {'path': path}."""
+    init_storage()
+    target = _safe_path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
+    return {"path": path, "size": len(data), "content_type": content_type}
 
 
 def get_object(path: str) -> tuple[bytes, str]:
-    key = init_storage()
-    if not key:
-        raise RuntimeError("Storage not initialized")
-    resp = requests.get(
-        f"{STORAGE_URL}/objects/{path}",
-        headers={"X-Storage-Key": key}, timeout=60,
-    )
-    if resp.status_code == 403:
-        global _storage_key
-        _storage_key = None
-        key = init_storage()
-        if not key:
-            raise RuntimeError("Storage re-init failed")
-        resp = requests.get(
-            f"{STORAGE_URL}/objects/{path}",
-            headers={"X-Storage-Key": key}, timeout=60,
-        )
-    resp.raise_for_status()
-    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
+    """Read bytes from UPLOAD_DIR/path. Returns (data, content_type)."""
+    target = _safe_path(path)
+    if not target.is_file():
+        raise FileNotFoundError(f"Object not found: {path}")
+    data = target.read_bytes()
+    content_type = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+    return data, content_type
+
+
+def delete_object(path: str) -> bool:
+    """Delete a stored file. Returns True if deleted."""
+    try:
+        target = _safe_path(path)
+    except ValueError:
+        return False
+    if target.is_file():
+        target.unlink()
+        return True
+    return False
