@@ -600,6 +600,7 @@ async def update_event(event_id: str, payload: EventIn, _admin: dict = Depends(r
         "title": payload.title,
         "description": payload.description or "",
         "location": payload.location or "",
+        "address": payload.address or "",
         "event_date": payload.event_date,
         "event_time": payload.event_time,
         "price_member": float(payload.price_member or 0),
