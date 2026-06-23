@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 import EventImageUpload from "@/components/EventImageUpload";
 import StoredImage from "@/components/StoredImage";
+import MemberSelector from "@/components/MemberSelector";
 import {
   Dialog,
   DialogContent,
@@ -26,7 +27,7 @@ export default function EventsPage() {
   const isAdmin = user?.role === "admin";
   const [events, setEvents] = useState([]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", location: "", address: "", event_date: "", event_time: "", registration_deadline: "", price_member: "", price_non_member: "", email_on_register: true, email_on_paid: true, email_on_reminder: true, image_path: null });
+  const [form, setForm] = useState({ title: "", description: "", location: "", address: "", event_date: "", event_time: "", registration_deadline: "", price_member: "", price_non_member: "", email_on_register: true, email_on_paid: true, email_on_reminder: true, image_path: null, contact_member: null });
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -48,11 +49,12 @@ export default function EventsPage() {
     try {
       await api.post("/events", {
         ...form,
+        contact_member_id: form.contact_member?.id || null,
         price_member: Number(form.price_member) || 0,
         price_non_member: Number(form.price_non_member) || 0,
       });
       setOpen(false);
-      setForm({ title: "", description: "", location: "", address: "", event_date: "", event_time: "", registration_deadline: "", price_member: "", price_non_member: "", email_on_register: true, email_on_paid: true, email_on_reminder: true, image_path: null });
+      setForm({ title: "", description: "", location: "", address: "", event_date: "", event_time: "", registration_deadline: "", price_member: "", price_non_member: "", email_on_register: true, email_on_paid: true, email_on_reminder: true, image_path: null, contact_member: null });
       await load();
       toast.success("Arrangement oprettet");
     } catch (err) {
@@ -135,6 +137,14 @@ export default function EventsPage() {
                     value={form.registration_deadline}
                     onChange={(e) => setForm({ ...form, registration_deadline: e.target.value })}
                     data-testid="event-deadline-input"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Tilmelding til (medlem)</Label>
+                  <MemberSelector
+                    value={form.contact_member}
+                    onChange={(m) => setForm({ ...form, contact_member: m })}
+                    data-testid="event-contact-selector"
                   />
                 </div>
                 <div className="space-y-2">

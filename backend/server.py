@@ -145,6 +145,7 @@ class EventIn(BaseModel):
     event_date: Optional[str] = None  # ISO string yyyy-mm-dd or full ISO
     event_time: Optional[str] = None  # HH:MM
     registration_deadline: Optional[str] = None  # yyyy-mm-dd
+    contact_member_id: Optional[str] = None  # ObjectId string referencing a member
     price_member: float = 0
     price_non_member: float = 0
     email_on_register: bool = True
@@ -162,6 +163,10 @@ class EventOut(BaseModel):
     event_date: Optional[str] = None
     event_time: Optional[str] = None
     registration_deadline: Optional[str] = None
+    contact_member_id: Optional[str] = None
+    contact_name: str = ""
+    contact_email: str = ""
+    contact_phone: str = ""
     created_at: str
     email_on_register: bool = True
     email_on_paid: bool = True
@@ -238,6 +243,10 @@ def event_to_out(doc, count: int = 0, total_members: int = 0, total_non_members:
         "event_date": doc.get("event_date"),
         "event_time": doc.get("event_time"),
         "registration_deadline": doc.get("registration_deadline"),
+        "contact_member_id": doc.get("contact_member_id"),
+        "contact_name": doc.get("contact_name", ""),
+        "contact_email": doc.get("contact_email", ""),
+        "contact_phone": doc.get("contact_phone", ""),
         "created_at": doc.get("created_at", ""),
         "price_member": float(doc.get("price_member", 0) or 0),
         "price_non_member": float(doc.get("price_non_member", 0) or 0),
@@ -274,6 +283,24 @@ def participant_to_out(doc) -> dict:
         "reminder_sent": bool(doc.get("reminder_sent", False)),
         "added_at": doc.get("added_at", ""),
     }
+
+
+async def _resolve_contact(member_id: str | None) -> dict:
+    """Look up contact member by id and return (contact_member_id, contact_name, contact_email, contact_phone)."""
+    out = {"contact_member_id": None, "contact_name": "", "contact_email": "", "contact_phone": ""}
+    if not member_id:
+        return out
+    try:
+        m = await db.members.find_one({"_id": ObjectId(member_id)})
+    except Exception:
+        return out
+    if not m:
+        return out
+    out["contact_member_id"] = str(m["_id"])
+    out["contact_name"] = m.get("navn", "")
+    out["contact_email"] = m.get("email", "")
+    out["contact_phone"] = m.get("telefon", "")
+    return out
 
 
 async def aggregate_event_totals(event_id: str):
@@ -568,6 +595,7 @@ async def list_events(_user: dict = Depends(get_current_user)):
 
 @api.post("/events", response_model=EventOut)
 async def create_event(payload: EventIn, _admin: dict = Depends(require_admin)):
+    contact = await _resolve_contact(payload.contact_member_id)
     doc = {
         "title": payload.title,
         "description": payload.description or "",
@@ -582,6 +610,7 @@ async def create_event(payload: EventIn, _admin: dict = Depends(require_admin)):
         "email_on_paid": bool(payload.email_on_paid),
         "email_on_reminder": bool(payload.email_on_reminder),
         "image_path": payload.image_path,
+        **contact,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     res = await db.events.insert_one(doc)
@@ -600,6 +629,7 @@ async def get_event(event_id: str, _user: dict = Depends(get_current_user)):
 
 @api.patch("/events/{event_id}", response_model=EventOut)
 async def update_event(event_id: str, payload: EventIn, _admin: dict = Depends(require_admin)):
+    contact = await _resolve_contact(payload.contact_member_id)
     update = {
         "title": payload.title,
         "description": payload.description or "",
@@ -614,6 +644,7 @@ async def update_event(event_id: str, payload: EventIn, _admin: dict = Depends(r
         "email_on_paid": bool(payload.email_on_paid),
         "email_on_reminder": bool(payload.email_on_reminder),
         "image_path": payload.image_path,
+        **contact,
     }
     await db.events.update_one({"_id": ObjectId(event_id)}, {"$set": update})
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
@@ -831,6 +862,9 @@ async def share_event_page(event_id: str, request: Request):
     date_str = _format_dk_date(ev.get("event_date"), ev.get("event_time"))
     if date_str:
         description_parts.append(date_str)
+    if ev.get("registration_deadline"):
+        deadline_str = _format_dk_date(ev.get("registration_deadline"), None)
+        description_parts.append(f"⏳ Tilmeldingsfrist: {deadline_str}")
     where_bits = []
     if ev.get("location"):
         where_bits.append(ev["location"])
@@ -844,6 +878,13 @@ async def share_event_page(event_id: str, request: Request):
         description_parts.append(
             f"Pris: {ev.get('price_member', 0):g} kr. medlem / {ev.get('price_non_member', 0):g} kr. ikke-medlem"
         )
+    if ev.get("contact_name"):
+        contact_bits = [ev["contact_name"]]
+        if ev.get("contact_email"):
+            contact_bits.append(ev["contact_email"])
+        if ev.get("contact_phone"):
+            contact_bits.append(ev["contact_phone"])
+        description_parts.append("Tilmelding til: " + " · ".join(contact_bits))
     description = "\n\n".join(description_parts) or title
 
     base_url = str(request.base_url).rstrip("/")
@@ -888,8 +929,10 @@ async def share_event_page(event_id: str, request: Request):
     <div class="body">
       <h1>{_html_escape(title)}</h1>
       <p class="meta">{_html_escape(date_str)}</p>
+      {f'<p class="meta">⏳ Tilmeldingsfrist: {_html_escape(_format_dk_date(ev.get("registration_deadline"), None))}</p>' if ev.get("registration_deadline") else ''}
       <p class="meta">{_html_escape(' · '.join(where_bits))}</p>
       <p>{_html_escape(ev.get('description', ''))}</p>
+      {f'<p class="meta"><strong>Tilmelding til:</strong> {_html_escape(ev.get("contact_name", ""))}{(" · " + _html_escape(ev.get("contact_email", ""))) if ev.get("contact_email") else ""}{(" · " + _html_escape(ev.get("contact_phone", ""))) if ev.get("contact_phone") else ""}</p>' if ev.get("contact_name") else ''}
     </div>
   </div>
 </body>

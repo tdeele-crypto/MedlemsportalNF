@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 import EventImageUpload from "@/components/EventImageUpload";
 import StoredImage from "@/components/StoredImage";
+import MemberSelector from "@/components/MemberSelector";
 
 const fmtKr = (n) => `${Math.round((Number(n) || 0) * 100) / 100} kr.`;
 
@@ -51,7 +52,7 @@ export default function EventDetailPage() {
   const [eventForm, setEventForm] = useState({
     title: "", description: "", location: "", address: "", event_date: "", event_time: "", registration_deadline: "", price_member: "", price_non_member: "",
     email_on_register: true, email_on_paid: true, email_on_reminder: true,
-    image_path: null,
+    image_path: null, contact_member: null,
   });
 
   const loadEvent = useCallback(async () => {
@@ -167,6 +168,12 @@ export default function EventDetailPage() {
       email_on_paid: event.email_on_paid !== false,
       email_on_reminder: event.email_on_reminder !== false,
       image_path: event.image_path || null,
+      contact_member: event.contact_member_id ? {
+        id: event.contact_member_id,
+        navn: event.contact_name || "",
+        email: event.contact_email || "",
+        telefon: event.contact_phone || "",
+      } : null,
     });
     setEventEditOpen(true);
   };
@@ -176,6 +183,7 @@ export default function EventDetailPage() {
     try {
       await api.patch(`/events/${id}`, {
         ...eventForm,
+        contact_member_id: eventForm.contact_member?.id || null,
         price_member: Number(eventForm.price_member) || 0,
         price_non_member: Number(eventForm.price_non_member) || 0,
       });
@@ -330,6 +338,21 @@ export default function EventDetailPage() {
           </div>
           {event.description && (
             <p className="mt-3 text-sm text-foreground/80 max-w-2xl leading-relaxed">{event.description}</p>
+          )}
+          {event.contact_name && (
+            <div className="mt-3 inline-block border border-border bg-muted/30 rounded-md px-3 py-2 text-sm" data-testid="event-contact-card">
+              <div className="label-tiny mb-0.5">Tilmelding til</div>
+              <div className="font-medium">{event.contact_name}</div>
+              <div className="text-xs text-muted-foreground">
+                {event.contact_email && (
+                  <a href={`mailto:${event.contact_email}`} className="text-primary hover:underline">{event.contact_email}</a>
+                )}
+                {event.contact_email && event.contact_phone && " · "}
+                {event.contact_phone && (
+                  <a href={`tel:${event.contact_phone}`} className="text-primary hover:underline">{event.contact_phone}</a>
+                )}
+              </div>
+            </div>
           )}
           {hasPrices && (
             <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
@@ -781,6 +804,14 @@ export default function EventDetailPage() {
                 value={eventForm.registration_deadline || ""}
                 onChange={(e) => setEventForm({ ...eventForm, registration_deadline: e.target.value })}
                 data-testid="edit-event-deadline-input"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Tilmelding til (medlem)</Label>
+              <MemberSelector
+                value={eventForm.contact_member}
+                onChange={(m) => setEventForm({ ...eventForm, contact_member: m })}
+                data-testid="edit-event-contact-selector"
               />
             </div>
             <div className="space-y-2">
