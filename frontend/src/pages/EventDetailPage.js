@@ -99,6 +99,7 @@ export default function EventDetailPage() {
       setNote("");
       setQ("");
       setSearchResults([]);
+      setAddOpen(false);
       await loadEvent();
     } catch (err) {
       toast.error(formatApiError(err));
