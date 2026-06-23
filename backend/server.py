@@ -136,6 +136,8 @@ class EventIn(BaseModel):
     description: str = ""
     location: str = ""
     event_date: Optional[str] = None  # ISO string yyyy-mm-dd or full ISO
+    price_member: float = 0
+    price_non_member: float = 0
 
 
 class EventOut(BaseModel):
@@ -145,7 +147,12 @@ class EventOut(BaseModel):
     location: str = ""
     event_date: Optional[str] = None
     created_at: str
+    price_member: float = 0
+    price_non_member: float = 0
     participant_count: int = 0
+    total_attendees: int = 0
+    total_members: int = 0
+    total_non_members: int = 0
 
 
 class ParticipantOut(BaseModel):
@@ -158,12 +165,24 @@ class ParticipantOut(BaseModel):
     email: str = ""
     telefon: str = ""
     note: str = ""
+    num_members: int = 1
+    num_non_members: int = 0
+    paid: bool = False
     added_at: str
 
 
 class AddParticipantIn(BaseModel):
     member_id: str
     note: str = ""
+    num_members: int = 1
+    num_non_members: int = 0
+
+
+class UpdateParticipantIn(BaseModel):
+    note: Optional[str] = None
+    num_members: Optional[int] = None
+    num_non_members: Optional[int] = None
+    paid: Optional[bool] = None
 
 
 # ----- Mongo doc helpers -----
@@ -180,7 +199,7 @@ def member_to_out(doc) -> dict:
     }
 
 
-def event_to_out(doc, count: int = 0) -> dict:
+def event_to_out(doc, count: int = 0, total_members: int = 0, total_non_members: int = 0) -> dict:
     return {
         "id": str(doc["_id"]),
         "title": doc.get("title", ""),
@@ -188,7 +207,12 @@ def event_to_out(doc, count: int = 0) -> dict:
         "location": doc.get("location", ""),
         "event_date": doc.get("event_date"),
         "created_at": doc.get("created_at", ""),
+        "price_member": float(doc.get("price_member", 0) or 0),
+        "price_non_member": float(doc.get("price_non_member", 0) or 0),
         "participant_count": count,
+        "total_members": total_members,
+        "total_non_members": total_non_members,
+        "total_attendees": total_members + total_non_members,
     }
 
 
@@ -203,8 +227,27 @@ def participant_to_out(doc) -> dict:
         "email": doc.get("email", ""),
         "telefon": doc.get("telefon", ""),
         "note": doc.get("note", ""),
+        "num_members": int(doc.get("num_members", 1) or 0),
+        "num_non_members": int(doc.get("num_non_members", 0) or 0),
+        "paid": bool(doc.get("paid", False)),
         "added_at": doc.get("added_at", ""),
     }
+
+
+async def aggregate_event_totals(event_id: str):
+    pipeline = [
+        {"$match": {"event_id": event_id}},
+        {"$group": {
+            "_id": None,
+            "count": {"$sum": 1},
+            "members": {"$sum": {"$ifNull": ["$num_members", 1]}},
+            "non_members": {"$sum": {"$ifNull": ["$num_non_members", 0]}},
+        }},
+    ]
+    agg = await db.participants.aggregate(pipeline).to_list(1)
+    if agg:
+        return agg[0]["count"], int(agg[0]["members"]), int(agg[0]["non_members"])
+    return 0, 0, 0
 
 
 # ----- Excel parsing -----
@@ -423,8 +466,8 @@ async def import_members(file: UploadFile = File(...), _admin: dict = Depends(re
 async def list_events(_user: dict = Depends(get_current_user)):
     items = []
     async for ev in db.events.find({}).sort("event_date", -1):
-        count = await db.participants.count_documents({"event_id": str(ev["_id"])})
-        items.append(event_to_out(ev, count))
+        count, members, non_members = await aggregate_event_totals(str(ev["_id"]))
+        items.append(event_to_out(ev, count, members, non_members))
     return items
 
 
@@ -435,11 +478,13 @@ async def create_event(payload: EventIn, _admin: dict = Depends(require_admin)):
         "description": payload.description or "",
         "location": payload.location or "",
         "event_date": payload.event_date,
+        "price_member": float(payload.price_member or 0),
+        "price_non_member": float(payload.price_non_member or 0),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     res = await db.events.insert_one(doc)
     doc["_id"] = res.inserted_id
-    return event_to_out(doc, 0)
+    return event_to_out(doc, 0, 0, 0)
 
 
 @api.get("/events/{event_id}", response_model=EventOut)
@@ -447,8 +492,8 @@ async def get_event(event_id: str, _user: dict = Depends(get_current_user)):
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
     if not ev:
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
-    count = await db.participants.count_documents({"event_id": event_id})
-    return event_to_out(ev, count)
+    count, members, non_members = await aggregate_event_totals(event_id)
+    return event_to_out(ev, count, members, non_members)
 
 
 @api.patch("/events/{event_id}", response_model=EventOut)
@@ -458,13 +503,15 @@ async def update_event(event_id: str, payload: EventIn, _admin: dict = Depends(r
         "description": payload.description or "",
         "location": payload.location or "",
         "event_date": payload.event_date,
+        "price_member": float(payload.price_member or 0),
+        "price_non_member": float(payload.price_non_member or 0),
     }
     await db.events.update_one({"_id": ObjectId(event_id)}, {"$set": update})
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
     if not ev:
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
-    count = await db.participants.count_documents({"event_id": event_id})
-    return event_to_out(ev, count)
+    count, members, non_members = await aggregate_event_totals(event_id)
+    return event_to_out(ev, count, members, non_members)
 
 
 @api.delete("/events/{event_id}")
@@ -491,6 +538,10 @@ async def add_participant(event_id: str, payload: AddParticipantIn, _admin: dict
     member = await db.members.find_one({"_id": ObjectId(payload.member_id)})
     if not member:
         raise HTTPException(status_code=404, detail="Medlem ikke fundet")
+    num_m = max(0, int(payload.num_members or 0))
+    num_nm = max(0, int(payload.num_non_members or 0))
+    if num_m + num_nm < 1:
+        num_m = 1
     doc = {
         "event_id": event_id,
         "member_id": str(member["_id"]),
@@ -500,6 +551,9 @@ async def add_participant(event_id: str, payload: AddParticipantIn, _admin: dict
         "email": member.get("email", ""),
         "telefon": member.get("telefon", ""),
         "note": payload.note or "",
+        "num_members": num_m,
+        "num_non_members": num_nm,
+        "paid": False,
         "added_at": datetime.now(timezone.utc).isoformat(),
     }
     res = await db.participants.insert_one(doc)
@@ -508,11 +562,21 @@ async def add_participant(event_id: str, payload: AddParticipantIn, _admin: dict
 
 
 @api.patch("/events/{event_id}/participants/{participant_id}", response_model=ParticipantOut)
-async def update_participant_note(event_id: str, participant_id: str, payload: AddParticipantIn, _admin: dict = Depends(require_admin)):
-    await db.participants.update_one(
-        {"_id": ObjectId(participant_id), "event_id": event_id},
-        {"$set": {"note": payload.note or ""}}
-    )
+async def update_participant(event_id: str, participant_id: str, payload: UpdateParticipantIn, _admin: dict = Depends(require_admin)):
+    update = {}
+    if payload.note is not None:
+        update["note"] = payload.note
+    if payload.num_members is not None:
+        update["num_members"] = max(0, int(payload.num_members))
+    if payload.num_non_members is not None:
+        update["num_non_members"] = max(0, int(payload.num_non_members))
+    if payload.paid is not None:
+        update["paid"] = bool(payload.paid)
+    if update:
+        await db.participants.update_one(
+            {"_id": ObjectId(participant_id), "event_id": event_id},
+            {"$set": update},
+        )
     p = await db.participants.find_one({"_id": ObjectId(participant_id)})
     if not p:
         raise HTTPException(status_code=404, detail="Tilmelding ikke fundet")

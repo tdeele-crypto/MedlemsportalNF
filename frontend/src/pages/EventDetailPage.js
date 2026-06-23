@@ -26,6 +26,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Calendar, MapPin, Plus, Search, Trash2, Pencil, Check, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -42,6 +43,8 @@ export default function EventDetailPage() {
   const [searching, setSearching] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
   const [note, setNote] = useState("");
+  const [numMembers, setNumMembers] = useState(1);
+  const [numNonMembers, setNumNonMembers] = useState(0);
   const [saving, setSaving] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [editingNoteVal, setEditingNoteVal] = useState("");
@@ -91,12 +94,25 @@ export default function EventDetailPage() {
 
   const handleAdd = async () => {
     if (!selectedMember) return;
+    const nm = Number(numMembers) || 0;
+    const nnm = Number(numNonMembers) || 0;
+    if (nm + nnm < 1) {
+      toast.error("Antal skal være mindst 1");
+      return;
+    }
     setSaving(true);
     try {
-      await api.post(`/events/${id}/participants`, { member_id: selectedMember.id, note });
-      toast.success(`${selectedMember.navn} tilmeldt`);
+      await api.post(`/events/${id}/participants`, {
+        member_id: selectedMember.id,
+        note,
+        num_members: nm,
+        num_non_members: nnm,
+      });
+      toast.success(`${selectedMember.navn} tilmeldt (${nm + nnm} deltagere)`);
       setSelectedMember(null);
       setNote("");
+      setNumMembers(1);
+      setNumNonMembers(0);
       setQ("");
       setSearchResults([]);
       setAddOpen(false);
@@ -120,14 +136,21 @@ export default function EventDetailPage() {
 
   const handleSaveNote = async (pid) => {
     try {
-      const p = participants.find((x) => x.id === pid);
       await api.patch(`/events/${id}/participants/${pid}`, {
-        member_id: p.member_id,
         note: editingNoteVal,
       });
       setEditingNoteId(null);
       await loadEvent();
       toast.success("Note opdateret");
+    } catch (err) {
+      toast.error(formatApiError(err));
+    }
+  };
+
+  const handleTogglePaid = async (p) => {
+    try {
+      await api.patch(`/events/${id}/participants/${p.id}`, { paid: !p.paid });
+      await loadEvent();
     } catch (err) {
       toast.error(formatApiError(err));
     }
@@ -178,12 +201,30 @@ export default function EventDetailPage() {
               {event.description}
             </p>
           )}
+          {(event.price_member > 0 || event.price_non_member > 0) && (
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+              <span className="px-2 py-1 rounded-md bg-primary/10 text-primary" data-testid="event-price-member">
+                Medlem: {event.price_member} kr.
+              </span>
+              <span className="px-2 py-1 rounded-md bg-muted text-foreground/70" data-testid="event-price-non-member">
+                Ikke-medlem: {event.price_non_member} kr.
+              </span>
+            </div>
+          )}
         </div>
-        <div className="text-right">
+        <div className="text-right shrink-0">
           <div className="text-4xl font-bold text-primary" data-testid="participant-count">
-            {participants.length}
+            {event.total_attendees ?? participants.length}
           </div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider">tilmeldte</div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider">deltagere i alt</div>
+          <div className="mt-2 text-xs text-muted-foreground">
+            <span data-testid="total-members">{event.total_members ?? 0}</span> medlem{(event.total_members ?? 0) === 1 ? "" : "mer"}
+            {" · "}
+            <span data-testid="total-non-members">{event.total_non_members ?? 0}</span> ikke-medl.
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {participants.length} tilmelding{participants.length === 1 ? "" : "er"}
+          </div>
         </div>
       </div>
 
@@ -270,6 +311,33 @@ export default function EventDetailPage() {
                       #{selectedMember.medlemsnummer} · {selectedMember.email} · {selectedMember.telefon}
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="num-members">Antal medlemmer</Label>
+                      <Input
+                        id="num-members"
+                        type="number"
+                        min="0"
+                        value={numMembers}
+                        onChange={(e) => setNumMembers(e.target.value)}
+                        data-testid="num-members-input"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="num-non-members">Antal ikke-medlemmer</Label>
+                      <Input
+                        id="num-non-members"
+                        type="number"
+                        min="0"
+                        value={numNonMembers}
+                        onChange={(e) => setNumNonMembers(e.target.value)}
+                        data-testid="num-non-members-input"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    I alt: <strong>{(Number(numMembers) || 0) + (Number(numNonMembers) || 0)}</strong> deltagere på denne tilmelding
+                  </p>
                   <div className="space-y-2">
                     <Label htmlFor="note">Note (valgfri)</Label>
                     <Textarea
@@ -290,7 +358,7 @@ export default function EventDetailPage() {
                     <Button
                       type="button"
                       variant="ghost"
-                      onClick={() => { setSelectedMember(null); setNote(""); }}
+                      onClick={() => { setSelectedMember(null); setNote(""); setNumMembers(1); setNumNonMembers(0); }}
                       data-testid="participant-back"
                     >
                       Tilbage
@@ -325,9 +393,11 @@ export default function EventDetailPage() {
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-24">Medl. nr.</TableHead>
+              <TableHead className="w-20">Medl. nr.</TableHead>
               <TableHead>Navn & adresse</TableHead>
               <TableHead className="hidden md:table-cell">Kontakt</TableHead>
+              <TableHead className="w-28">Antal</TableHead>
+              <TableHead className="w-20 text-center">Betalt</TableHead>
               <TableHead>Note</TableHead>
               {isAdmin && <TableHead className="w-16"></TableHead>}
             </TableRow>
@@ -335,13 +405,15 @@ export default function EventDetailPage() {
           <TableBody>
             {participants.length === 0 && (
               <TableRow>
-                <TableCell colSpan={isAdmin ? 5 : 4} className="text-center text-sm text-muted-foreground py-10">
+                <TableCell colSpan={isAdmin ? 7 : 6} className="text-center text-sm text-muted-foreground py-10">
                   Ingen deltagere endnu.
                 </TableCell>
               </TableRow>
             )}
-            {participants.map((p) => (
-              <TableRow key={p.id} data-testid={`participant-row-${p.id}`}>
+            {participants.map((p) => {
+              const total = (p.num_members || 0) + (p.num_non_members || 0);
+              return (
+              <TableRow key={p.id} data-testid={`participant-row-${p.id}`} className={p.paid ? "bg-primary/5" : ""}>
                 <TableCell className="font-mono text-xs align-top">{p.medlemsnummer}</TableCell>
                 <TableCell className="align-top">
                   <div className="font-medium">{p.navn}</div>
@@ -354,6 +426,21 @@ export default function EventDetailPage() {
                 <TableCell className="hidden md:table-cell text-sm align-top">
                   <div>{p.email}</div>
                   <div className="text-xs text-muted-foreground">{p.telefon}</div>
+                </TableCell>
+                <TableCell className="align-top text-sm" data-testid={`participant-count-${p.id}`}>
+                  <div className="font-semibold">{total}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {p.num_members || 0} medl. · {p.num_non_members || 0} ikke-m.
+                  </div>
+                </TableCell>
+                <TableCell className="align-top text-center">
+                  <Checkbox
+                    checked={!!p.paid}
+                    onCheckedChange={() => isAdmin && handleTogglePaid(p)}
+                    disabled={!isAdmin}
+                    data-testid={`paid-checkbox-${p.id}`}
+                    aria-label="Betalt"
+                  />
                 </TableCell>
                 <TableCell className="align-top text-sm">
                   {editingNoteId === p.id ? (
@@ -438,7 +525,8 @@ export default function EventDetailPage() {
                   </TableCell>
                 )}
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </div>

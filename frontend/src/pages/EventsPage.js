@@ -22,7 +22,7 @@ export default function EventsPage() {
   const isAdmin = user?.role === "admin";
   const [events, setEvents] = useState([]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", location: "", event_date: "" });
+  const [form, setForm] = useState({ title: "", description: "", location: "", event_date: "", price_member: "", price_non_member: "" });
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -42,9 +42,13 @@ export default function EventsPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      await api.post("/events", form);
+      await api.post("/events", {
+        ...form,
+        price_member: Number(form.price_member) || 0,
+        price_non_member: Number(form.price_non_member) || 0,
+      });
       setOpen(false);
-      setForm({ title: "", description: "", location: "", event_date: "" });
+      setForm({ title: "", description: "", location: "", event_date: "", price_member: "", price_non_member: "" });
       await load();
       toast.success("Arrangement oprettet");
     } catch (err) {
@@ -107,6 +111,34 @@ export default function EventsPage() {
                     onChange={(e) => setForm({ ...form, location: e.target.value })}
                     data-testid="event-location-input"
                   />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="price_member">Pris medlem (kr.)</Label>
+                    <Input
+                      id="price_member"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0"
+                      value={form.price_member}
+                      onChange={(e) => setForm({ ...form, price_member: e.target.value })}
+                      data-testid="event-price-member-input"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="price_non_member">Pris ikke-medlem (kr.)</Label>
+                    <Input
+                      id="price_non_member"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0"
+                      value={form.price_non_member}
+                      onChange={(e) => setForm({ ...form, price_non_member: e.target.value })}
+                      data-testid="event-price-non-member-input"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="description">Beskrivelse</Label>
@@ -179,9 +211,17 @@ export default function EventsPage() {
               </div>
               <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" strokeWidth={1.6} />
             </div>
-            <div className="mt-4 pt-4 border-t border-border flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-primary">{ev.participant_count}</span>
-              <span className="text-xs text-muted-foreground">tilmeldte</span>
+            <div className="mt-4 pt-4 border-t border-border flex items-baseline justify-between">
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-primary">{ev.total_attendees ?? ev.participant_count}</span>
+                <span className="text-xs text-muted-foreground">deltagere</span>
+              </div>
+              {(ev.price_member > 0 || ev.price_non_member > 0) && (
+                <div className="text-xs text-muted-foreground text-right">
+                  <div>{ev.price_member} kr. / medlem</div>
+                  <div>{ev.price_non_member} kr. / ikke-medl.</div>
+                </div>
+              )}
             </div>
           </Link>
         ))}
