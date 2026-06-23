@@ -49,7 +49,7 @@ export default function EventDetailPage() {
   // Edit event
   const [eventEditOpen, setEventEditOpen] = useState(false);
   const [eventForm, setEventForm] = useState({
-    title: "", description: "", location: "", address: "", event_date: "", event_time: "", price_member: "", price_non_member: "",
+    title: "", description: "", location: "", address: "", event_date: "", event_time: "", registration_deadline: "", price_member: "", price_non_member: "",
     email_on_register: true, email_on_paid: true, email_on_reminder: true,
     image_path: null,
   });
@@ -160,6 +160,7 @@ export default function EventDetailPage() {
       address: event.address || "",
       event_date: event.event_date || "",
       event_time: event.event_time || "",
+      registration_deadline: event.registration_deadline || "",
       price_member: event.price_member ?? "",
       price_non_member: event.price_non_member ?? "",
       email_on_register: event.email_on_register !== false,
@@ -314,6 +315,18 @@ export default function EventDetailPage() {
                 {event.address}
               </span>
             )}
+            {event.registration_deadline && (() => {
+              const past = new Date(event.registration_deadline) < new Date(new Date().toDateString());
+              return (
+                <span
+                  className={`flex items-center gap-1.5 ${past ? "text-destructive" : ""}`}
+                  data-testid="event-deadline"
+                >
+                  ⏳ Tilmeldingsfrist: {new Date(event.registration_deadline).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}
+                  {past && " (udløbet)"}
+                </span>
+              );
+            })()}
           </div>
           {event.description && (
             <p className="mt-3 text-sm text-foreground/80 max-w-2xl leading-relaxed">{event.description}</p>
@@ -760,6 +773,15 @@ export default function EventDetailPage() {
                   data-testid="edit-event-time-input"
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ev-deadline">Senest tilmeldingsfrist</Label>
+              <Input
+                id="ev-deadline" type="date"
+                value={eventForm.registration_deadline || ""}
+                onChange={(e) => setEventForm({ ...eventForm, registration_deadline: e.target.value })}
+                data-testid="edit-event-deadline-input"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="ev-location">Vi mødes her</Label>

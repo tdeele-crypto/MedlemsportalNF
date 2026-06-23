@@ -144,6 +144,7 @@ class EventIn(BaseModel):
     address: str = ""
     event_date: Optional[str] = None  # ISO string yyyy-mm-dd or full ISO
     event_time: Optional[str] = None  # HH:MM
+    registration_deadline: Optional[str] = None  # yyyy-mm-dd
     price_member: float = 0
     price_non_member: float = 0
     email_on_register: bool = True
@@ -160,6 +161,7 @@ class EventOut(BaseModel):
     address: str = ""
     event_date: Optional[str] = None
     event_time: Optional[str] = None
+    registration_deadline: Optional[str] = None
     created_at: str
     email_on_register: bool = True
     email_on_paid: bool = True
@@ -235,6 +237,7 @@ def event_to_out(doc, count: int = 0, total_members: int = 0, total_non_members:
         "address": doc.get("address", ""),
         "event_date": doc.get("event_date"),
         "event_time": doc.get("event_time"),
+        "registration_deadline": doc.get("registration_deadline"),
         "created_at": doc.get("created_at", ""),
         "price_member": float(doc.get("price_member", 0) or 0),
         "price_non_member": float(doc.get("price_non_member", 0) or 0),
@@ -572,6 +575,7 @@ async def create_event(payload: EventIn, _admin: dict = Depends(require_admin)):
         "address": payload.address or "",
         "event_date": payload.event_date,
         "event_time": payload.event_time,
+        "registration_deadline": payload.registration_deadline,
         "price_member": float(payload.price_member or 0),
         "price_non_member": float(payload.price_non_member or 0),
         "email_on_register": bool(payload.email_on_register),
@@ -603,6 +607,7 @@ async def update_event(event_id: str, payload: EventIn, _admin: dict = Depends(r
         "address": payload.address or "",
         "event_date": payload.event_date,
         "event_time": payload.event_time,
+        "registration_deadline": payload.registration_deadline,
         "price_member": float(payload.price_member or 0),
         "price_non_member": float(payload.price_non_member or 0),
         "email_on_register": bool(payload.email_on_register),
