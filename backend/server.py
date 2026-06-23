@@ -135,6 +135,7 @@ class EventIn(BaseModel):
     title: str
     description: str = ""
     location: str = ""
+    address: str = ""
     event_date: Optional[str] = None  # ISO string yyyy-mm-dd or full ISO
     event_time: Optional[str] = None  # HH:MM
     price_member: float = 0
@@ -146,6 +147,7 @@ class EventOut(BaseModel):
     title: str
     description: str = ""
     location: str = ""
+    address: str = ""
     event_date: Optional[str] = None
     event_time: Optional[str] = None
     created_at: str
@@ -215,6 +217,7 @@ def event_to_out(doc, count: int = 0, total_members: int = 0, total_non_members:
         "title": doc.get("title", ""),
         "description": doc.get("description", ""),
         "location": doc.get("location", ""),
+        "address": doc.get("address", ""),
         "event_date": doc.get("event_date"),
         "event_time": doc.get("event_time"),
         "created_at": doc.get("created_at", ""),
@@ -546,6 +549,7 @@ async def create_event(payload: EventIn, _admin: dict = Depends(require_admin)):
         "title": payload.title,
         "description": payload.description or "",
         "location": payload.location or "",
+        "address": payload.address or "",
         "event_date": payload.event_date,
         "event_time": payload.event_time,
         "price_member": float(payload.price_member or 0),

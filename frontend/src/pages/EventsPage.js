@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import AddressAutocomplete from "@/components/AddressAutocomplete";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +23,7 @@ export default function EventsPage() {
   const isAdmin = user?.role === "admin";
   const [events, setEvents] = useState([]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", location: "", event_date: "", event_time: "", price_member: "", price_non_member: "" });
+  const [form, setForm] = useState({ title: "", description: "", location: "", address: "", event_date: "", event_time: "", price_member: "", price_non_member: "" });
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -48,7 +49,7 @@ export default function EventsPage() {
         price_non_member: Number(form.price_non_member) || 0,
       });
       setOpen(false);
-      setForm({ title: "", description: "", location: "", event_date: "", event_time: "", price_member: "", price_non_member: "" });
+      setForm({ title: "", description: "", location: "", address: "", event_date: "", event_time: "", price_member: "", price_non_member: "" });
       await load();
       toast.success("Arrangement oprettet");
     } catch (err) {
@@ -116,12 +117,21 @@ export default function EventsPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="location">Sted</Label>
+                  <Label htmlFor="location">Vi mødes her</Label>
                   <Input
                     id="location"
+                    placeholder="F.eks. Klubhuset, Café Nord..."
                     value={form.location}
                     onChange={(e) => setForm({ ...form, location: e.target.value })}
                     data-testid="event-location-input"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="address">Adresse</Label>
+                  <AddressAutocomplete
+                    value={form.address}
+                    onChange={(v) => setForm({ ...form, address: v })}
+                    data-testid="event-address-input"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -217,7 +227,16 @@ export default function EventsPage() {
                   {ev.location && (
                     <div className="flex items-center gap-2">
                       <MapPin className="w-4 h-4" strokeWidth={1.5} />
-                      {ev.location}
+                      <span>
+                        {ev.location}
+                        {ev.address && <span className="text-muted-foreground/80"> · {ev.address}</span>}
+                      </span>
+                    </div>
+                  )}
+                  {!ev.location && ev.address && (
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4" strokeWidth={1.5} />
+                      {ev.address}
                     </div>
                   )}
                 </div>

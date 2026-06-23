@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Calendar, MapPin, Plus, Search, Trash2, Pencil, Download, Settings2 } from "lucide-react";
 import { toast } from "sonner";
+import AddressAutocomplete from "@/components/AddressAutocomplete";
 
 const fmtKr = (n) => `${Math.round((Number(n) || 0) * 100) / 100} kr.`;
 
@@ -46,7 +47,7 @@ export default function EventDetailPage() {
   // Edit event
   const [eventEditOpen, setEventEditOpen] = useState(false);
   const [eventForm, setEventForm] = useState({
-    title: "", description: "", location: "", event_date: "", event_time: "", price_member: "", price_non_member: "",
+    title: "", description: "", location: "", address: "", event_date: "", event_time: "", price_member: "", price_non_member: "",
   });
 
   const loadEvent = useCallback(async () => {
@@ -152,6 +153,7 @@ export default function EventDetailPage() {
       title: event.title || "",
       description: event.description || "",
       location: event.location || "",
+      address: event.address || "",
       event_date: event.event_date || "",
       event_time: event.event_time || "",
       price_member: event.price_member ?? "",
@@ -235,6 +237,12 @@ export default function EventDetailPage() {
               <span className="flex items-center gap-1.5">
                 <MapPin className="w-4 h-4" strokeWidth={1.5} />
                 {event.location}
+              </span>
+            )}
+            {event.address && (
+              <span className="flex items-center gap-1.5 text-muted-foreground/80">
+                {!event.location && <MapPin className="w-4 h-4" strokeWidth={1.5} />}
+                {event.address}
               </span>
             )}
           </div>
@@ -651,12 +659,21 @@ export default function EventDetailPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="ev-location">Sted</Label>
+              <Label htmlFor="ev-location">Vi mødes her</Label>
               <Input
                 id="ev-location"
+                placeholder="F.eks. Klubhuset, Café Nord..."
                 value={eventForm.location}
                 onChange={(e) => setEventForm({ ...eventForm, location: e.target.value })}
                 data-testid="edit-event-location-input"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ev-address">Adresse</Label>
+              <AddressAutocomplete
+                value={eventForm.address}
+                onChange={(v) => setEventForm({ ...eventForm, address: v })}
+                data-testid="edit-event-address-input"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
