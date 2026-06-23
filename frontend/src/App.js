@@ -8,6 +8,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import MembersPage from "@/pages/MembersPage";
 import EventsPage from "@/pages/EventsPage";
 import EventDetailPage from "@/pages/EventDetailPage";
+import QuickCheckInPage from "@/pages/QuickCheckInPage";
 import UsersPage from "@/pages/UsersPage";
 
 function ProtectedRoute({ children, adminOnly = false }) {
@@ -30,6 +31,14 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/arrangementer/:id/check-in"
+            element={
+              <ProtectedRoute adminOnly>
+                <QuickCheckInPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/"
             element={

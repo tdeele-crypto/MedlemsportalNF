@@ -144,6 +144,9 @@ class EventIn(BaseModel):
     event_time: Optional[str] = None  # HH:MM
     price_member: float = 0
     price_non_member: float = 0
+    email_on_register: bool = True
+    email_on_paid: bool = True
+    email_on_reminder: bool = True
 
 
 class EventOut(BaseModel):
@@ -155,6 +158,9 @@ class EventOut(BaseModel):
     event_date: Optional[str] = None
     event_time: Optional[str] = None
     created_at: str
+    email_on_register: bool = True
+    email_on_paid: bool = True
+    email_on_reminder: bool = True
     price_member: float = 0
     price_non_member: float = 0
     participant_count: int = 0
@@ -181,6 +187,7 @@ class ParticipantOut(BaseModel):
     num_non_members: int = 0
     paid: bool = False
     checked_in: bool = False
+    reminder_sent: bool = False
     added_at: str
 
 
@@ -227,6 +234,9 @@ def event_to_out(doc, count: int = 0, total_members: int = 0, total_non_members:
         "created_at": doc.get("created_at", ""),
         "price_member": float(doc.get("price_member", 0) or 0),
         "price_non_member": float(doc.get("price_non_member", 0) or 0),
+        "email_on_register": bool(doc.get("email_on_register", True)),
+        "email_on_paid": bool(doc.get("email_on_paid", True)),
+        "email_on_reminder": bool(doc.get("email_on_reminder", True)),
         "participant_count": count,
         "total_members": total_members,
         "total_non_members": total_non_members,
@@ -253,6 +263,7 @@ def participant_to_out(doc) -> dict:
         "num_non_members": int(doc.get("num_non_members", 0) or 0),
         "paid": bool(doc.get("paid", False)),
         "checked_in": bool(doc.get("checked_in", False)),
+        "reminder_sent": bool(doc.get("reminder_sent", False)),
         "added_at": doc.get("added_at", ""),
     }
 
@@ -558,6 +569,9 @@ async def create_event(payload: EventIn, _admin: dict = Depends(require_admin)):
         "event_time": payload.event_time,
         "price_member": float(payload.price_member or 0),
         "price_non_member": float(payload.price_non_member or 0),
+        "email_on_register": bool(payload.email_on_register),
+        "email_on_paid": bool(payload.email_on_paid),
+        "email_on_reminder": bool(payload.email_on_reminder),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     res = await db.events.insert_one(doc)
@@ -584,6 +598,9 @@ async def update_event(event_id: str, payload: EventIn, _admin: dict = Depends(r
         "event_time": payload.event_time,
         "price_member": float(payload.price_member or 0),
         "price_non_member": float(payload.price_non_member or 0),
+        "email_on_register": bool(payload.email_on_register),
+        "email_on_paid": bool(payload.email_on_paid),
+        "email_on_reminder": bool(payload.email_on_reminder),
     }
     await db.events.update_one({"_id": ObjectId(event_id)}, {"$set": update})
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
@@ -639,12 +656,13 @@ async def add_participant(event_id: str, payload: AddParticipantIn, background: 
     }
     res = await db.participants.insert_one(doc)
     doc["_id"] = res.inserted_id
-    background.add_task(
-        email_utils.send_registration_email,
-        member, ev, num_m, num_nm, payload.note or "",
-        float(ev.get("price_member", 0) or 0),
-        float(ev.get("price_non_member", 0) or 0),
-    )
+    if bool(ev.get("email_on_register", True)):
+        background.add_task(
+            email_utils.send_registration_email,
+            member, ev, num_m, num_nm, payload.note or "",
+            float(ev.get("price_member", 0) or 0),
+            float(ev.get("price_non_member", 0) or 0),
+        )
     return participant_to_out(doc)
 
 
@@ -674,7 +692,7 @@ async def update_participant(event_id: str, participant_id: str, payload: Update
         raise HTTPException(status_code=404, detail="Tilmelding ikke fundet")
     if payload.paid is True and not bool(existing.get("paid", False)):
         ev = await db.events.find_one({"_id": ObjectId(event_id)})
-        if ev:
+        if ev and bool(ev.get("email_on_paid", True)):
             background.add_task(email_utils.send_payment_email, p, ev)
     return participant_to_out(p)
 
@@ -788,6 +806,8 @@ async def send_reminders_for_date(target_date_str: str) -> dict:
     failed = 0
     events_cursor = db.events.find({"event_date": target_date_str})
     async for ev in events_cursor:
+        if not bool(ev.get("email_on_reminder", True)):
+            continue
         parts = db.participants.find({"event_id": str(ev["_id"]), "reminder_sent": {"$ne": True}})
         async for p in parts:
             if not p.get("email"):

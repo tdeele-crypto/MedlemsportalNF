@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 import {
   Dialog,
@@ -49,7 +50,7 @@ export default function EventsPage() {
         price_non_member: Number(form.price_non_member) || 0,
       });
       setOpen(false);
-      setForm({ title: "", description: "", location: "", address: "", event_date: "", event_time: "", price_member: "", price_non_member: "" });
+      setForm({ title: "", description: "", location: "", address: "", event_date: "", event_time: "", price_member: "", price_non_member: "", email_on_register: true, email_on_paid: true, email_on_reminder: true });
       await load();
       toast.success("Arrangement oprettet");
     } catch (err) {
@@ -171,6 +172,35 @@ export default function EventsPage() {
                     rows={3}
                     data-testid="event-description-input"
                   />
+                </div>
+                <div className="space-y-2 pt-2 border-t border-border">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Email-notifikationer</Label>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={form.email_on_register}
+                        onCheckedChange={(v) => setForm({ ...form, email_on_register: !!v })}
+                        data-testid="event-email-register"
+                      />
+                      <span>Send mail ved tilmelding</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={form.email_on_paid}
+                        onCheckedChange={(v) => setForm({ ...form, email_on_paid: !!v })}
+                        data-testid="event-email-paid"
+                      />
+                      <span>Send mail når betaling registreres</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <Checkbox
+                        checked={form.email_on_reminder}
+                        onCheckedChange={(v) => setForm({ ...form, email_on_reminder: !!v })}
+                        data-testid="event-email-reminder"
+                      />
+                      <span>Send påmindelse 2 dage før</span>
+                    </label>
+                  </div>
                 </div>
                 <DialogFooter>
                   <Button type="button" variant="ghost" onClick={() => setOpen(false)} data-testid="event-cancel">

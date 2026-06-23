@@ -49,6 +49,32 @@ def _event_summary(event: dict) -> str:
     return "\n".join(parts)
 
 
+def _maps_link(address: str) -> str:
+    from urllib.parse import quote_plus
+    return f"https://www.google.com/maps/search/?api=1&query={quote_plus(address)}"
+
+
+def _event_summary_html(event: dict) -> str:
+    """HTML version of event summary, with address as clickable Google Maps link."""
+    parts = []
+    if event.get("event_date"):
+        s = _fmt_date(event["event_date"])
+        if event.get("event_time"):
+            s += f" kl. {event['event_time']}"
+        parts.append(s)
+    loc_bits = []
+    if event.get("location"):
+        loc_bits.append(event["location"])
+    addr = event.get("address")
+    if addr:
+        loc_bits.append(
+            f'<a href="{_maps_link(addr)}" style="color:#2C4C3B; text-decoration:underline;" target="_blank" rel="noopener">{addr}</a>'
+        )
+    if loc_bits:
+        parts.append(" · ".join(loc_bits))
+    return "<br>".join(parts)
+
+
 async def _send(to_email: str, to_name: str, subject: str, body_text: str, body_html: str | None = None) -> bool:
     if not _is_configured():
         logger.warning("SMTP not configured — skipping email to %s", to_email)
@@ -103,6 +129,7 @@ async def send_registration_email(member: dict, event: dict, num_members: int, n
     total = num_members + num_non_members
     title = event.get("title", "Arrangement")
     summary = _event_summary(event)
+    summary_html = _event_summary_html(event)
     expected = num_members * (price_member or 0) + num_non_members * (price_non_member or 0)
     price_line = ""
     if expected > 0:
@@ -123,7 +150,7 @@ async def send_registration_email(member: dict, event: dict, num_members: int, n
       <p style="margin:0 0 16px;">Du er nu tilmeldt arrangementet:</p>
       <div style="background:#F5F6F1; border-left:3px solid #2C4C3B; padding:14px 16px; border-radius:4px; margin:12px 0;">
         <div style="font-weight:600; font-size:16px;">{title}</div>
-        <div style="color:#5C615C; font-size:14px; white-space:pre-line; margin-top:6px;">{summary}</div>
+        <div style="color:#5C615C; font-size:14px; margin-top:6px;">{summary_html}</div>
       </div>
       <p style="margin:0 0 8px;"><strong>Antal:</strong> {total} ({num_members} medlemmer + {num_non_members} ikke-medlemmer)</p>
       {f'<p style="margin:0 0 8px;"><strong>Forventet betaling:</strong> {expected:g} kr.</p>' if expected > 0 else ''}
@@ -139,6 +166,7 @@ async def send_payment_email(participant: dict, event: dict) -> bool:
         return False
     title = event.get("title", "Arrangement")
     summary = _event_summary(event)
+    summary_html = _event_summary_html(event)
     text = (
         f"Hej {participant.get('navn', '')}\n\n"
         f"Vi har registreret din betaling for arrangementet: {title}.\n\n"
@@ -150,7 +178,7 @@ async def send_payment_email(participant: dict, event: dict) -> bool:
       <p style="margin:0 0 16px;">Vi har registreret din betaling for arrangementet:</p>
       <div style="background:#F5F6F1; border-left:3px solid #2C4C3B; padding:14px 16px; border-radius:4px; margin:12px 0;">
         <div style="font-weight:600; font-size:16px;">{title}</div>
-        <div style="color:#5C615C; font-size:14px; white-space:pre-line; margin-top:6px;">{summary}</div>
+        <div style="color:#5C615C; font-size:14px; margin-top:6px;">{summary_html}</div>
       </div>
       <p style="margin:24px 0 0;">Tak! Vi ses.</p>
     """
@@ -163,6 +191,7 @@ async def send_reminder_email(participant: dict, event: dict) -> bool:
         return False
     title = event.get("title", "Arrangement")
     summary = _event_summary(event)
+    summary_html = _event_summary_html(event)
     text = (
         f"Hej {participant.get('navn', '')}\n\n"
         f"Bare en lille påmindelse: Du er tilmeldt arrangementet {title} om 2 dage.\n\n"
@@ -173,7 +202,7 @@ async def send_reminder_email(participant: dict, event: dict) -> bool:
       <p style="margin:0 0 16px;">Bare en lille påmindelse: Du er tilmeldt arrangementet om <strong>2 dage</strong>.</p>
       <div style="background:#F5F6F1; border-left:3px solid #2C4C3B; padding:14px 16px; border-radius:4px; margin:12px 0;">
         <div style="font-weight:600; font-size:16px;">{title}</div>
-        <div style="color:#5C615C; font-size:14px; white-space:pre-line; margin-top:6px;">{summary}</div>
+        <div style="color:#5C615C; font-size:14px; margin-top:6px;">{summary_html}</div>
       </div>
       <p style="margin:24px 0 0;">Vi glæder os til at se dig.</p>
     """

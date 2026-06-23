@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Calendar, MapPin, Plus, Search, Trash2, Pencil, Download, Settings2 } from "lucide-react";
+import { ArrowLeft, Calendar, MapPin, Plus, Search, Trash2, Pencil, Download, Settings2, ScanLine, Send } from "lucide-react";
 import { toast } from "sonner";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 
@@ -48,6 +48,7 @@ export default function EventDetailPage() {
   const [eventEditOpen, setEventEditOpen] = useState(false);
   const [eventForm, setEventForm] = useState({
     title: "", description: "", location: "", address: "", event_date: "", event_time: "", price_member: "", price_non_member: "",
+    email_on_register: true, email_on_paid: true, email_on_reminder: true,
   });
 
   const loadEvent = useCallback(async () => {
@@ -158,6 +159,9 @@ export default function EventDetailPage() {
       event_time: event.event_time || "",
       price_member: event.price_member ?? "",
       price_non_member: event.price_non_member ?? "",
+      email_on_register: event.email_on_register !== false,
+      email_on_paid: event.email_on_paid !== false,
+      email_on_reminder: event.email_on_reminder !== false,
     });
     setEventEditOpen(true);
   };
@@ -315,6 +319,14 @@ export default function EventDetailPage() {
       <div className="mt-10 flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-xl font-semibold tracking-tight">Deltagere</h2>
         <div className="flex items-center gap-2">
+          {participants.length > 0 && isAdmin && (
+            <Link to={`/arrangementer/${id}/check-in`} data-testid="quick-checkin-link">
+              <Button variant="outline">
+                <ScanLine className="w-4 h-4 mr-2" strokeWidth={1.6} />
+                Hurtig check-in
+              </Button>
+            </Link>
+          )}
           {participants.length > 0 && (
             <Button
               variant="outline"
@@ -491,7 +503,14 @@ export default function EventDetailPage() {
                     )}
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-sm align-top">
-                    <div>{p.email}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span>{p.email}</span>
+                      {p.reminder_sent && p.email && (
+                        <span title="Påmindelse sendt" data-testid={`reminder-sent-${p.id}`}>
+                          <Send className="w-3 h-3 text-primary" strokeWidth={1.8} />
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-muted-foreground">{p.telefon}</div>
                   </TableCell>
                   <TableCell className="align-top text-sm" data-testid={`participant-count-${p.id}`}>
@@ -705,6 +724,35 @@ export default function EventDetailPage() {
                 rows={3}
                 data-testid="edit-event-description-input"
               />
+            </div>
+            <div className="space-y-2 pt-2 border-t border-border">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Email-notifikationer</Label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={eventForm.email_on_register}
+                    onCheckedChange={(v) => setEventForm({ ...eventForm, email_on_register: !!v })}
+                    data-testid="edit-event-email-register"
+                  />
+                  <span>Send mail ved tilmelding</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={eventForm.email_on_paid}
+                    onCheckedChange={(v) => setEventForm({ ...eventForm, email_on_paid: !!v })}
+                    data-testid="edit-event-email-paid"
+                  />
+                  <span>Send mail når betaling registreres</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={eventForm.email_on_reminder}
+                    onCheckedChange={(v) => setEventForm({ ...eventForm, email_on_reminder: !!v })}
+                    data-testid="edit-event-email-reminder"
+                  />
+                  <span>Send påmindelse 2 dage før</span>
+                </label>
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setEventEditOpen(false)} data-testid="edit-event-cancel">
