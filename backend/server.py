@@ -770,6 +770,11 @@ async def root():
     return {"message": "Medlems- og Arrangementsapp API"}
 
 
+@api.get("/config/facebook")
+async def facebook_config(_user: dict = Depends(get_current_user)):
+    return {"group_url": os.environ.get("FACEBOOK_GROUP_URL", "")}
+
+
 # ----- Image upload (event covers) -----
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB

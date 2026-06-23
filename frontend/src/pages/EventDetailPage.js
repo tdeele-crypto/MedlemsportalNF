@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Calendar, MapPin, Plus, Search, Trash2, Pencil, Download, Settings2, ScanLine, Send } from "lucide-react";
+import { ArrowLeft, Calendar, MapPin, Plus, Search, Trash2, Pencil, Download, Settings2, ScanLine, Send, Facebook } from "lucide-react";
 import { toast } from "sonner";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 import EventImageUpload from "@/components/EventImageUpload";
@@ -196,6 +196,83 @@ export default function EventDetailPage() {
     } catch (err) { toast.error(formatApiError(err)); }
   };
 
+  const fmtDateDk = (date, time) => {
+    if (!date) return "";
+    try {
+      const d = new Date(date);
+      const days = ["søndag","mandag","tirsdag","onsdag","torsdag","fredag","lørdag"];
+      const months = ["januar","februar","marts","april","maj","juni","juli","august","september","oktober","november","december"];
+      let s = `${days[d.getDay()]} d. ${d.getDate()}. ${months[d.getMonth()]} ${d.getFullYear()}`;
+      if (time) s += ` kl. ${time}`;
+      return s;
+    } catch { return date; }
+  };
+
+  const buildPostText = () => {
+    if (!event) return "";
+    const lines = [];
+    lines.push(`📅 ${event.title}`);
+    lines.push("");
+    if (event.event_date) lines.push(fmtDateDk(event.event_date, event.event_time));
+    const where = [event.location, event.address].filter(Boolean).join(" · ");
+    if (where) lines.push(`📍 ${where}`);
+    if (event.description) {
+      lines.push("");
+      lines.push(event.description);
+    }
+    if ((event.price_member ?? 0) > 0 || (event.price_non_member ?? 0) > 0) {
+      lines.push("");
+      lines.push(`💰 Pris: ${event.price_member} kr. for medlemmer / ${event.price_non_member} kr. for ikke-medlemmer`);
+    }
+    lines.push("");
+    lines.push("Tilmelding via Medlemsportalen.");
+    return lines.join("\n");
+  };
+
+  const handleShareFacebook = async () => {
+    if (!event) return;
+    const postText = buildPostText();
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(postText);
+      copied = true;
+    } catch {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = postText; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        copied = document.execCommand("copy");
+        ta.remove();
+      } catch { copied = false; }
+    }
+    if (event.image_path) {
+      try {
+        const { data } = await api.get(`/files/${event.image_path}`, { responseType: "blob" });
+        const url = window.URL.createObjectURL(data);
+        const a = document.createElement("a");
+        a.href = url;
+        const ext = (event.image_path.split(".").pop() || "jpg").toLowerCase();
+        a.download = `${(event.title || "arrangement").replace(/\s+/g, "_")}.${ext}`;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+      } catch { /* ignore */ }
+    }
+    let fbUrl = "https://www.facebook.com/groups/315581835133905";
+    try {
+      const { data } = await api.get("/config/facebook");
+      if (data?.group_url) fbUrl = data.group_url;
+    } catch { /* keep default */ }
+    window.open(fbUrl, "_blank", "noopener,noreferrer");
+    if (copied && event.image_path) {
+      toast.success("Tekst kopieret + billede hentet. Indsæt i Facebook-gruppen (Cmd/Ctrl+V) og træk billedet ind.");
+    } else if (copied) {
+      toast.success("Tekst kopieret til udklipsholder. Indsæt i Facebook-gruppen med Cmd/Ctrl+V.");
+    } else {
+      toast.warning("Kunne ikke kopiere automatisk. Kopier teksten manuelt fra arrangement-siden.");
+    }
+  };
+
+
   if (!event) {
     return <div className="p-10 text-sm text-muted-foreground" data-testid="event-detail-loading">Indlæser arrangement...</div>;
   }
@@ -350,6 +427,17 @@ export default function EventDetailPage() {
             >
               <Download className="w-4 h-4 mr-2" strokeWidth={1.6} />
               Eksportér CSV
+            </Button>
+          )}
+          {isAdmin && (
+            <Button
+              variant="outline"
+              onClick={handleShareFacebook}
+              data-testid="facebook-share-button"
+              className="border-[#1877F2]/30 text-[#1877F2] hover:bg-[#1877F2]/5 hover:text-[#1877F2]"
+            >
+              <Facebook className="w-4 h-4 mr-2" strokeWidth={1.6} />
+              Del på Facebook
             </Button>
           )}
           {isAdmin && (
