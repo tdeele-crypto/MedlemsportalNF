@@ -29,3 +29,10 @@ frontend/.env
 test_reports/
 .pytest_cache/
 .coverage
+.env
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials
