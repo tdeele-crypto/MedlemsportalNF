@@ -22,21 +22,19 @@ Arrangement og medlems check app: Webapp skal både have frontend og backend, me
 - Role-based: only admin mutates
 
 ## Implemented (2026-02)
-- ✅ JWT auth with seeded admin, /api/auth/{login,me,logout}
+- ✅ JWT auth with seeded admin, /api/auth/{login,me,logout}, brute force lockout
 - ✅ User CRUD (admin)
 - ✅ Excel parser → parses `Medlemskaber` into `medlemstype` + `bladstatus`
 - ✅ Member list + wildcard regex search
 - ✅ Event CRUD (incl. UI edit dialog with gear icon)
-- ✅ Participant add/edit (counts + note via dialog) / delete
-- ✅ Per-tilmelding antal medlemmer + antal ikke-medlemmer
-- ✅ Priser pr. arrangement (medlem / ikke-medlem)
-- ✅ Betalt-checkbox pr. tilmelding (admin toggle)
-- ✅ Økonomi-widget: Forventet / Betalt / Mangler
-- ✅ CSV-eksport af deltagerliste med "Mødt op"-kolonne (check-in liste)
-- ✅ Brute force beskyttelse på /api/auth/login (5 forsøg → 15 min lockout)
-- ✅ Dashboard with stats + recent events
-- ✅ Danish UI throughout, modern minimalist green/off-white design
-- ✅ 19/19 backend tests passing; full E2E flows verified iteration 2
+- ✅ Tid (HH:MM) felt på arrangementer
+- ✅ "Vi mødes her" + DAWA adresse-autocomplete
+- ✅ Priser pr. arrangement, antal medl/ikke-medl pr. tilmelding
+- ✅ Betalt-checkbox + Mødt op (live check-in) checkbox
+- ✅ Økonomi-widget (Forventet/Betalt/Mangler)
+- ✅ CSV-eksport af deltagerliste med Mødt op-status
+- ✅ **SMTP via Brevo**: automatiske emails ved tilmelding, ved betaling registreret, samt påmindelse 2 dage før arrangement (APScheduler kører dagligt kl. 09:00 Europe/Copenhagen)
+- ✅ Admin endpoint `/api/admin/run-reminders` til manuel udsendelse
 
 ## Backlog
 - **P2**: Email reminders til tilmeldte (Resend integration)

@@ -15,10 +15,14 @@ import bcrypt
 import jwt as pyjwt
 import openpyxl
 from bson import ObjectId
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, UploadFile, File, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, UploadFile, File, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr, BeforeValidator, ConfigDict
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from zoneinfo import ZoneInfo
+import email_utils
 
 
 # ----- Logging -----
@@ -606,7 +610,7 @@ async def list_participants(event_id: str, _user: dict = Depends(get_current_use
 
 
 @api.post("/events/{event_id}/participants", response_model=ParticipantOut)
-async def add_participant(event_id: str, payload: AddParticipantIn, _admin: dict = Depends(require_admin)):
+async def add_participant(event_id: str, payload: AddParticipantIn, background: BackgroundTasks, _admin: dict = Depends(require_admin)):
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
     if not ev:
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
@@ -629,15 +633,26 @@ async def add_participant(event_id: str, payload: AddParticipantIn, _admin: dict
         "num_members": num_m,
         "num_non_members": num_nm,
         "paid": False,
+        "checked_in": False,
+        "reminder_sent": False,
         "added_at": datetime.now(timezone.utc).isoformat(),
     }
     res = await db.participants.insert_one(doc)
     doc["_id"] = res.inserted_id
+    background.add_task(
+        email_utils.send_registration_email,
+        member, ev, num_m, num_nm, payload.note or "",
+        float(ev.get("price_member", 0) or 0),
+        float(ev.get("price_non_member", 0) or 0),
+    )
     return participant_to_out(doc)
 
 
 @api.patch("/events/{event_id}/participants/{participant_id}", response_model=ParticipantOut)
-async def update_participant(event_id: str, participant_id: str, payload: UpdateParticipantIn, _admin: dict = Depends(require_admin)):
+async def update_participant(event_id: str, participant_id: str, payload: UpdateParticipantIn, background: BackgroundTasks, _admin: dict = Depends(require_admin)):
+    existing = await db.participants.find_one({"_id": ObjectId(participant_id), "event_id": event_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Tilmelding ikke fundet")
     update = {}
     if payload.note is not None:
         update["note"] = payload.note
@@ -657,6 +672,10 @@ async def update_participant(event_id: str, participant_id: str, payload: Update
     p = await db.participants.find_one({"_id": ObjectId(participant_id)})
     if not p:
         raise HTTPException(status_code=404, detail="Tilmelding ikke fundet")
+    if payload.paid is True and not bool(existing.get("paid", False)):
+        ev = await db.events.find_one({"_id": ObjectId(event_id)})
+        if ev:
+            background.add_task(email_utils.send_payment_email, p, ev)
     return participant_to_out(p)
 
 
@@ -753,10 +772,92 @@ async def on_startup():
                     {"$set": {"password_hash": hash_password(admin_password), "role": "admin"}},
                 )
                 logger.info(f"Updated admin password for {admin_email}")
+    # Start scheduler for reminder emails
+    _start_scheduler()
+
+
+# ----- Reminder scheduler -----
+scheduler: Optional[AsyncIOScheduler] = None
+
+
+async def send_reminders_for_date(target_date_str: str) -> dict:
+    """Find all events on target_date_str (yyyy-mm-dd) and email reminders to participants
+    who have not yet received one. Returns counters."""
+    sent = 0
+    skipped = 0
+    failed = 0
+    events_cursor = db.events.find({"event_date": target_date_str})
+    async for ev in events_cursor:
+        parts = db.participants.find({"event_id": str(ev["_id"]), "reminder_sent": {"$ne": True}})
+        async for p in parts:
+            if not p.get("email"):
+                skipped += 1
+                continue
+            ok = await email_utils.send_reminder_email(p, ev)
+            if ok:
+                await db.participants.update_one(
+                    {"_id": p["_id"]},
+                    {"$set": {"reminder_sent": True, "reminder_sent_at": datetime.now(timezone.utc).isoformat()}},
+                )
+                sent += 1
+            else:
+                failed += 1
+    logger.info("Reminder run for %s: sent=%d skipped=%d failed=%d", target_date_str, sent, skipped, failed)
+    return {"sent": sent, "skipped": skipped, "failed": failed}
+
+
+async def _reminder_job():
+    """Daily job: send reminders to participants of events happening in exactly 2 days."""
+    try:
+        tz = ZoneInfo(os.environ.get("REMINDER_TIMEZONE", "Europe/Copenhagen"))
+    except Exception:
+        tz = ZoneInfo("Europe/Copenhagen")
+    target = (datetime.now(tz).date() + timedelta(days=2)).isoformat()
+    await send_reminders_for_date(target)
+
+
+def _start_scheduler():
+    global scheduler
+    if scheduler is not None:
+        return
+    try:
+        tz = ZoneInfo(os.environ.get("REMINDER_TIMEZONE", "Europe/Copenhagen"))
+    except Exception:
+        tz = ZoneInfo("Europe/Copenhagen")
+    hour = int(os.environ.get("REMINDER_HOUR", "9") or "9")
+    scheduler = AsyncIOScheduler(timezone=tz)
+    scheduler.add_job(
+        _reminder_job,
+        trigger=CronTrigger(hour=hour, minute=0, timezone=tz),
+        id="reminder_2d",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info("Reminder scheduler started (daily %02d:00 %s)", hour, tz.key)
+
+
+# Admin endpoint to manually trigger today's reminder run (useful for testing)
+@api.post("/admin/run-reminders")
+async def admin_run_reminders(target_date: Optional[str] = None, _admin: dict = Depends(require_admin)):
+    """Manually trigger reminders. If target_date is omitted, defaults to today+2 days."""
+    if not target_date:
+        try:
+            tz = ZoneInfo(os.environ.get("REMINDER_TIMEZONE", "Europe/Copenhagen"))
+        except Exception:
+            tz = ZoneInfo("Europe/Copenhagen")
+        target_date = (datetime.now(tz).date() + timedelta(days=2)).isoformat()
+    return await send_reminders_for_date(target_date)
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    global scheduler
+    if scheduler is not None:
+        try:
+            scheduler.shutdown(wait=False)
+        except Exception:
+            pass
+        scheduler = None
     client.close()
 
 
