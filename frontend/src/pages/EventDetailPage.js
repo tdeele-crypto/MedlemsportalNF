@@ -231,45 +231,18 @@ export default function EventDetailPage() {
 
   const handleShareFacebook = async () => {
     if (!event) return;
+    // Build a public share URL that Facebook's scraper reads (Open Graph tags
+    // are returned by /api/share/event/{id}). Facebook will show a preview
+    // with image, title, and description and the user can choose to post
+    // to the Nyreforeningen group (or anywhere else they have access).
+    const backend = process.env.REACT_APP_BACKEND_URL;
+    const shareUrl = `${backend}/api/share/event/${id}`;
+    // Also try to copy a quick post text to clipboard as a bonus
     const postText = buildPostText();
-    let copied = false;
-    try {
-      await navigator.clipboard.writeText(postText);
-      copied = true;
-    } catch {
-      try {
-        const ta = document.createElement("textarea");
-        ta.value = postText; ta.style.position = "fixed"; ta.style.opacity = "0";
-        document.body.appendChild(ta); ta.select();
-        copied = document.execCommand("copy");
-        ta.remove();
-      } catch { copied = false; }
-    }
-    if (event.image_path) {
-      try {
-        const { data } = await api.get(`/files/${event.image_path}`, { responseType: "blob" });
-        const url = window.URL.createObjectURL(data);
-        const a = document.createElement("a");
-        a.href = url;
-        const ext = (event.image_path.split(".").pop() || "jpg").toLowerCase();
-        a.download = `${(event.title || "arrangement").replace(/\s+/g, "_")}.${ext}`;
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(() => window.URL.revokeObjectURL(url), 1000);
-      } catch { /* ignore */ }
-    }
-    let fbUrl = "https://www.facebook.com/groups/315581835133905";
-    try {
-      const { data } = await api.get("/config/facebook");
-      if (data?.group_url) fbUrl = data.group_url;
-    } catch { /* keep default */ }
-    window.open(fbUrl, "_blank", "noopener,noreferrer");
-    if (copied && event.image_path) {
-      toast.success("Tekst kopieret + billede hentet. Indsæt i Facebook-gruppen (Cmd/Ctrl+V) og træk billedet ind.");
-    } else if (copied) {
-      toast.success("Tekst kopieret til udklipsholder. Indsæt i Facebook-gruppen med Cmd/Ctrl+V.");
-    } else {
-      toast.warning("Kunne ikke kopiere automatisk. Kopier teksten manuelt fra arrangement-siden.");
-    }
+    try { await navigator.clipboard.writeText(postText); } catch { /* ignore */ }
+    const fbShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+    window.open(fbShareUrl, "fbshare", "width=720,height=640,noopener=yes");
+    toast.success("Facebook åbnet med arrangementet (billede + tekst). Vælg din gruppe i 'Del på'-menuen og klik Slå op.");
   };
 
 

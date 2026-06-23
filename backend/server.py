@@ -771,6 +771,127 @@ async def root():
     return {"message": "Medlems- og Arrangementsapp API"}
 
 
+# ----- Public sharing (no auth required) -----
+@api.get("/share/event/{event_id}/image")
+async def share_event_image(event_id: str):
+    """Public endpoint that serves the event cover image. Used by Facebook's Open Graph scraper."""
+    if not ObjectId.is_valid(event_id):
+        raise HTTPException(status_code=404, detail="Ikke fundet")
+    ev = await db.events.find_one({"_id": ObjectId(event_id)})
+    if not ev or not ev.get("image_path"):
+        raise HTTPException(status_code=404, detail="Intet billede")
+    path = ev["image_path"]
+    try:
+        data, content_type = storage_utils.get_object(path)
+    except Exception as e:
+        logger.error("Public image fetch failed: %s", e)
+        raise HTTPException(status_code=500, detail="Kunne ikke hente billede")
+    return FastResponse(content=data, media_type=content_type,
+                        headers={"Cache-Control": "public, max-age=300"})
+
+
+def _html_escape(s) -> str:
+    if s is None:
+        return ""
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;").replace("'", "&#39;"))
+
+
+def _format_dk_date(date_str: str | None, time_str: str | None) -> str:
+    if not date_str:
+        return ""
+    try:
+        d = datetime.fromisoformat(date_str.replace("Z", "+00:00").split("T")[0])
+        DK_DAYS = ["mandag","tirsdag","onsdag","torsdag","fredag","lørdag","søndag"]
+        DK_MONTHS = ["januar","februar","marts","april","maj","juni","juli","august","september","oktober","november","december"]
+        s = f"{DK_DAYS[d.weekday()]} d. {d.day}. {DK_MONTHS[d.month - 1]} {d.year}"
+        if time_str:
+            s += f" kl. {time_str}"
+        return s
+    except Exception:
+        return date_str
+
+
+@api.get("/share/event/{event_id}")
+async def share_event_page(event_id: str, request: Request):
+    """Public Open Graph preview page. Facebook's scraper reads OG tags here."""
+    if not ObjectId.is_valid(event_id):
+        raise HTTPException(status_code=404, detail="Ikke fundet")
+    ev = await db.events.find_one({"_id": ObjectId(event_id)})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
+
+    title = ev.get("title", "Arrangement")
+    description_parts = []
+    date_str = _format_dk_date(ev.get("event_date"), ev.get("event_time"))
+    if date_str:
+        description_parts.append(date_str)
+    where_bits = []
+    if ev.get("location"):
+        where_bits.append(ev["location"])
+    if ev.get("address"):
+        where_bits.append(ev["address"])
+    if where_bits:
+        description_parts.append(" · ".join(where_bits))
+    if ev.get("description"):
+        description_parts.append(ev["description"])
+    if (ev.get("price_member") or 0) > 0 or (ev.get("price_non_member") or 0) > 0:
+        description_parts.append(
+            f"Pris: {ev.get('price_member', 0):g} kr. medlem / {ev.get('price_non_member', 0):g} kr. ikke-medlem"
+        )
+    description = "\n\n".join(description_parts) or title
+
+    base_url = str(request.base_url).rstrip("/")
+    # Behind the Kubernetes ingress, the public host is in X-Forwarded-* headers.
+    fwd_host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    fwd_proto = request.headers.get("x-forwarded-proto", "https")
+    if fwd_host and "preview.emergentagent" in fwd_host:
+        base_url = f"{fwd_proto}://{fwd_host}"
+    page_url = f"{base_url}/api/share/event/{event_id}"
+    image_url = f"{base_url}/api/share/event/{event_id}/image" if ev.get("image_path") else ""
+
+    html = f"""<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{_html_escape(title)}</title>
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Medlemsportal">
+  <meta property="og:title" content="{_html_escape(title)}">
+  <meta property="og:description" content="{_html_escape(description)}">
+  <meta property="og:url" content="{page_url}">
+  {f'<meta property="og:image" content="{image_url}">' if image_url else ''}
+  {f'<meta property="og:image:secure_url" content="{image_url}">' if image_url else ''}
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{_html_escape(title)}">
+  <meta name="twitter:description" content="{_html_escape(description)}">
+  {f'<meta name="twitter:image" content="{image_url}">' if image_url else ''}
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:#F5F6F1; color:#1B1F1B; margin:0; padding:24px; }}
+    .card {{ max-width: 600px; margin: 32px auto; background:#fff; border:1px solid #E1E5DC; border-radius:8px; overflow:hidden; }}
+    .card img {{ width:100%; height:auto; display:block; }}
+    .body {{ padding:24px; }}
+    h1 {{ margin:0 0 12px; font-size:22px; }}
+    p {{ margin:8px 0; white-space:pre-line; color:#3a3f3a; }}
+    .meta {{ color:#5C615C; font-size:14px; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    {f'<img src="{image_url}" alt="">' if image_url else ''}
+    <div class="body">
+      <h1>{_html_escape(title)}</h1>
+      <p class="meta">{_html_escape(date_str)}</p>
+      <p class="meta">{_html_escape(' · '.join(where_bits))}</p>
+      <p>{_html_escape(ev.get('description', ''))}</p>
+    </div>
+  </div>
+</body>
+</html>"""
+    return FastResponse(content=html, media_type="text/html; charset=utf-8")
+
+
 @api.get("/config/facebook")
 async def facebook_config(_user: dict = Depends(get_current_user)):
     return {"group_url": os.environ.get("FACEBOOK_GROUP_URL", "")}
