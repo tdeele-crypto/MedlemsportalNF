@@ -261,28 +261,27 @@ export default function EventDetailPage() {
 
   const openFacebookWindow = async () => {
     try { await navigator.clipboard.writeText(fbShareText); } catch { /* ignore */ }
-    // Download image so the user can drag it into the FB post
-    if (event?.image_path) {
-      try {
-        const { data } = await api.get(`/files/${event.image_path}`, { responseType: "blob" });
-        const url = window.URL.createObjectURL(data);
-        const a = document.createElement("a");
-        a.href = url;
-        const ext = (event.image_path.split(".").pop() || "jpg").toLowerCase();
-        a.download = `${(event.title || "arrangement").replace(/\s+/g, "_")}.${ext}`;
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(() => window.URL.revokeObjectURL(url), 1000);
-      } catch { /* ignore */ }
-    }
-    // Open the Facebook group page directly. User is already member,
-    // so they land in the group and can immediately create a post,
-    // paste the (pre-copied) text, and drag in the downloaded image.
     let groupUrl = "https://www.facebook.com/groups/315581835133905";
     try {
       const { data } = await api.get("/config/facebook");
       if (data?.group_url) groupUrl = data.group_url;
     } catch { /* keep default */ }
     window.open(groupUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const downloadFbImage = async () => {
+    if (!event?.image_path) return;
+    try {
+      const { data } = await api.get(`/files/${event.image_path}`, { responseType: "blob" });
+      const url = window.URL.createObjectURL(data);
+      const a = document.createElement("a");
+      a.href = url;
+      const ext = (event.image_path.split(".").pop() || "jpg").toLowerCase();
+      a.download = `${(event.title || "arrangement").replace(/\s+/g, "_")}.${ext}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+      toast.success("Billede downloadet");
+    } catch (err) { toast.error(formatApiError(err)); }
   };
 
   const copyFbText = async () => {
@@ -802,10 +801,11 @@ export default function EventDetailPage() {
             <div className="text-sm text-foreground/80 space-y-2">
               <p><strong>Sådan gør du:</strong></p>
               <ol className="list-decimal pl-5 space-y-1 text-sm">
-                <li>Klik <strong>&quot;Åbn Facebook-gruppen&quot;</strong> nedenfor — gruppen åbner i ny fane og billedet downloades</li>
-                <li>I gruppen klik <strong>&quot;Skriv noget...&quot;</strong> for at oprette et nyt opslag</li>
+                <li>(Valgfri) Klik <strong>&quot;Download billede&quot;</strong> hvis du vil have arrangementets billede med</li>
+                <li>Klik <strong>&quot;Åbn Facebook-gruppen&quot;</strong> — gruppen åbner i ny fane</li>
+                <li>I gruppen klik <strong>&quot;Skriv noget...&quot;</strong></li>
                 <li>Indsæt teksten med <strong>Cmd/Ctrl + V</strong> (allerede kopieret)</li>
-                <li>Træk det downloadede billede ind i opslaget</li>
+                <li>Træk det downloadede billede ind i opslaget (hvis du downloadede det)</li>
                 <li>Klik <strong>Slå op</strong></li>
               </ol>
             </div>
@@ -831,6 +831,18 @@ export default function EventDetailPage() {
               <Download className="w-4 h-4 mr-2 rotate-180" strokeWidth={1.6} />
               Kopier tekst igen
             </Button>
+            {event?.image_path && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={downloadFbImage}
+                className="w-full"
+                data-testid="facebook-download-image"
+              >
+                <Download className="w-4 h-4 mr-2" strokeWidth={1.6} />
+                Download billede
+              </Button>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setFbShareOpen(false)} data-testid="facebook-close">
