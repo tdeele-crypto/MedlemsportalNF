@@ -223,6 +223,9 @@ export default function EventDetailPage() {
     lines.push(`📅 ${event.title}`);
     lines.push("");
     if (event.event_date) lines.push(fmtDateDk(event.event_date, event.event_time));
+    if (event.registration_deadline) {
+      lines.push(`⏳ Senest tilmelding: ${fmtDateDk(event.registration_deadline, null)}`);
+    }
     const where = [event.location, event.address].filter(Boolean).join(" · ");
     if (where) lines.push(`📍 ${where}`);
     if (event.description) {
@@ -233,25 +236,45 @@ export default function EventDetailPage() {
       lines.push("");
       lines.push(`💰 Pris: ${event.price_member} kr. for medlemmer / ${event.price_non_member} kr. for ikke-medlemmer`);
     }
-    lines.push("");
-    lines.push("Tilmelding via Medlemsportalen.");
+    if (event.contact_name) {
+      lines.push("");
+      const cParts = [`Tilmelding til ${event.contact_name}`];
+      if (event.contact_email) cParts.push(event.contact_email);
+      if (event.contact_phone) cParts.push(`tlf. ${event.contact_phone}`);
+      lines.push(cParts.join(" · "));
+    }
     return lines.join("\n");
   };
 
+  // Facebook share state
+  const [fbShareOpen, setFbShareOpen] = useState(false);
+  const [fbShareText, setFbShareText] = useState("");
+
   const handleShareFacebook = async () => {
     if (!event) return;
-    // Build a public share URL that Facebook's scraper reads (Open Graph tags
-    // are returned by /api/share/event/{id}). Facebook will show a preview
-    // with image, title, and description and the user can choose to post
-    // to the Nyreforeningen group (or anywhere else they have access).
+    const postText = buildPostText();
+    setFbShareText(postText);
+    // Pre-copy to clipboard so paste works immediately in FB
+    try { await navigator.clipboard.writeText(postText); } catch { /* ignore */ }
+    setFbShareOpen(true);
+  };
+
+  const openFacebookWindow = async () => {
+    // Copy again right before opening (in case clipboard was overwritten)
+    try { await navigator.clipboard.writeText(fbShareText); } catch { /* ignore */ }
     const backend = process.env.REACT_APP_BACKEND_URL;
     const shareUrl = `${backend}/api/share/event/${id}`;
-    // Also try to copy a quick post text to clipboard as a bonus
-    const postText = buildPostText();
-    try { await navigator.clipboard.writeText(postText); } catch { /* ignore */ }
     const fbShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
     window.open(fbShareUrl, "fbshare", "width=720,height=640,noopener=yes");
-    toast.success("Facebook åbnet med arrangementet (billede + tekst). Vælg din gruppe i 'Del på'-menuen og klik Slå op.");
+  };
+
+  const copyFbText = async () => {
+    try {
+      await navigator.clipboard.writeText(fbShareText);
+      toast.success("Tekst kopieret til udklipsholder");
+    } catch {
+      toast.error("Kunne ikke kopiere — markér teksten manuelt og kopier");
+    }
   };
 
 
@@ -748,6 +771,62 @@ export default function EventDetailPage() {
               className="bg-primary hover:bg-primary/90 text-primary-foreground"
               data-testid="edit-participant-save"
             >Gem ændringer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Facebook share helper dialog */}
+      <Dialog open={fbShareOpen} onOpenChange={setFbShareOpen}>
+        <DialogContent className="bg-white max-w-xl max-h-[90vh] overflow-y-auto" data-testid="facebook-share-dialog">
+          <DialogHeader>
+            <DialogTitle>Del på Facebook</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="text-sm text-foreground/80 space-y-2">
+              <p><strong>Sådan gør du:</strong></p>
+              <ol className="list-decimal pl-5 space-y-1 text-sm">
+                <li>Klik <strong>&quot;Åbn Facebook&quot;</strong> nedenfor — Facebook åbner i et nyt vindue med billedet vedhæftet</li>
+                <li>I FB-dialogen klik i feltet <em>&quot;Hvad har du på hjerte&quot;</em></li>
+                <li>Indsæt teksten med <strong>Cmd/Ctrl + V</strong> (allerede kopieret til udklipsholder)</li>
+                <li>Vælg <strong>Nyreforeningen-gruppen</strong> i &quot;Del på&quot;-menuen og klik <strong>Slå op</strong></li>
+              </ol>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fb-text">Tekst til opslaget</Label>
+              <Textarea
+                id="fb-text"
+                value={fbShareText}
+                onChange={(e) => setFbShareText(e.target.value)}
+                rows={10}
+                className="text-sm font-mono"
+                data-testid="facebook-share-text"
+              />
+              <p className="text-xs text-muted-foreground">Du kan redigere teksten her før du indsætter i Facebook.</p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={copyFbText}
+              className="w-full"
+              data-testid="facebook-copy-text"
+            >
+              <Download className="w-4 h-4 mr-2 rotate-180" strokeWidth={1.6} />
+              Kopier tekst igen
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setFbShareOpen(false)} data-testid="facebook-close">
+              Luk
+            </Button>
+            <Button
+              type="button"
+              onClick={openFacebookWindow}
+              className="bg-[#1877F2] hover:bg-[#1877F2]/90 text-white"
+              data-testid="facebook-open"
+            >
+              <Facebook className="w-4 h-4 mr-2" strokeWidth={1.6} />
+              Åbn Facebook
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
