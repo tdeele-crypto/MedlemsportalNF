@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_member-events-3/artifacts/zysp8e23_nflogo.jpg";
 
 const navItems = [
-  { to: "/", label: "Oversigt", icon: LayoutDashboard, end: true, key: "dashboard" },
+  { to: "/", label: "Oversigt", icon: LayoutDashboard, end: true, key: "dashboard", adminOnly: true },
   { to: "/medlemmer", label: "Medlemmer", icon: Users, key: "members" },
   { to: "/arrangementer", label: "Arrangementer", icon: Calendar, key: "events" },
 ];
@@ -27,7 +27,7 @@ export default function AppLayout() {
     navigate("/login");
   };
 
-  const items = [...navItems];
+  const items = navItems.filter((it) => !it.adminOnly || user?.role === "admin");
   if (user?.role === "admin") {
     items.push({ to: "/brugere", label: "Brugere", icon: UserCog, key: "users" });
   }

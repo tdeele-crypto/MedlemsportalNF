@@ -21,7 +21,7 @@ function ProtectedRoute({ children, adminOnly = false }) {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
-  if (adminOnly && user.role !== "admin") return <Navigate to="/" replace />;
+  if (adminOnly && user.role !== "admin") return <Navigate to="/medlemmer" replace />;
   return children;
 }
 
@@ -47,7 +47,14 @@ function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<DashboardPage />} />
+            <Route
+              index
+              element={
+                <ProtectedRoute adminOnly>
+                  <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="medlemmer" element={<MembersPage />} />
             <Route path="arrangementer" element={<EventsPage />} />
             <Route path="arrangementer/:id" element={<EventDetailPage />} />
