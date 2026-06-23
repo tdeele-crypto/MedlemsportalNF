@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowLeft, Calendar, MapPin, Plus, Search, Trash2, Pencil, Download, Settings2, ScanLine, Send, Facebook } from "lucide-react";
+import { ArrowLeft, Calendar, MapPin, Plus, Search, Trash2, Pencil, Download, ScanLine, Send, Facebook } from "lucide-react";
 import { toast } from "sonner";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 import EventImageUpload from "@/components/EventImageUpload";
@@ -303,19 +303,19 @@ export default function EventDetailPage() {
 
       <div className="mt-4 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div className="min-w-0">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight" data-testid="event-title">
               {event.title}
             </h1>
             {isAdmin && (
               <Button
-                size="icon"
-                variant="ghost"
+                variant="outline"
+                size="sm"
                 onClick={openEditEvent}
-                title="Rediger arrangement"
                 data-testid="edit-event-button"
               >
-                <Settings2 className="w-4 h-4" strokeWidth={1.6} />
+                <Pencil className="w-3.5 h-3.5 mr-2" strokeWidth={1.6} />
+                Rediger arrangement
               </Button>
             )}
           </div>
