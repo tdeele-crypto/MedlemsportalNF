@@ -82,7 +82,7 @@ export default function EventsPage() {
                 Nyt arrangement
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-white" data-testid="create-event-dialog">
+            <DialogContent className="bg-white max-h-[90vh] overflow-y-auto" data-testid="create-event-dialog">
               <DialogHeader>
                 <DialogTitle>Opret arrangement</DialogTitle>
               </DialogHeader>

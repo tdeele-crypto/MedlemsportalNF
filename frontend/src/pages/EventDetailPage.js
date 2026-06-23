@@ -451,7 +451,7 @@ export default function EventDetailPage() {
                   Tilføj deltager
                 </Button>
               </DialogTrigger>
-              <DialogContent className="bg-white max-w-2xl" data-testid="add-participant-dialog">
+              <DialogContent className="bg-white max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="add-participant-dialog">
                 <DialogHeader>
                   <DialogTitle>Tilføj deltager</DialogTitle>
                 </DialogHeader>
@@ -693,7 +693,7 @@ export default function EventDetailPage() {
 
       {/* Edit participant dialog */}
       <Dialog open={!!editP} onOpenChange={(o) => !o && setEditP(null)}>
-        <DialogContent className="bg-white" data-testid="edit-participant-dialog">
+        <DialogContent className="bg-white max-h-[90vh] overflow-y-auto" data-testid="edit-participant-dialog">
           <DialogHeader>
             <DialogTitle>Rediger tilmelding{editP ? ` – ${editP.navn}` : ""}</DialogTitle>
           </DialogHeader>
@@ -745,7 +745,7 @@ export default function EventDetailPage() {
 
       {/* Edit event dialog */}
       <Dialog open={eventEditOpen} onOpenChange={setEventEditOpen}>
-        <DialogContent className="bg-white" data-testid="edit-event-dialog">
+        <DialogContent className="bg-white max-h-[90vh] overflow-y-auto" data-testid="edit-event-dialog">
           <DialogHeader>
             <DialogTitle>Rediger arrangement</DialogTitle>
           </DialogHeader>
