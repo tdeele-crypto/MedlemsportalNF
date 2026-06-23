@@ -153,6 +153,9 @@ class EventOut(BaseModel):
     total_attendees: int = 0
     total_members: int = 0
     total_non_members: int = 0
+    expected_revenue: float = 0
+    paid_revenue: float = 0
+    outstanding_revenue: float = 0
 
 
 class ParticipantOut(BaseModel):
@@ -199,7 +202,8 @@ def member_to_out(doc) -> dict:
     }
 
 
-def event_to_out(doc, count: int = 0, total_members: int = 0, total_non_members: int = 0) -> dict:
+def event_to_out(doc, count: int = 0, total_members: int = 0, total_non_members: int = 0,
+                 expected_revenue: float = 0.0, paid_revenue: float = 0.0) -> dict:
     return {
         "id": str(doc["_id"]),
         "title": doc.get("title", ""),
@@ -213,6 +217,9 @@ def event_to_out(doc, count: int = 0, total_members: int = 0, total_non_members:
         "total_members": total_members,
         "total_non_members": total_non_members,
         "total_attendees": total_members + total_non_members,
+        "expected_revenue": round(expected_revenue, 2),
+        "paid_revenue": round(paid_revenue, 2),
+        "outstanding_revenue": round(max(0.0, expected_revenue - paid_revenue), 2),
     }
 
 
@@ -235,6 +242,10 @@ def participant_to_out(doc) -> dict:
 
 
 async def aggregate_event_totals(event_id: str):
+    """Returns (count, total_members, total_non_members, expected_revenue, paid_revenue)."""
+    ev = await db.events.find_one({"_id": ObjectId(event_id)}) if ObjectId.is_valid(event_id) else None
+    price_m = float((ev or {}).get("price_member", 0) or 0)
+    price_nm = float((ev or {}).get("price_non_member", 0) or 0)
     pipeline = [
         {"$match": {"event_id": event_id}},
         {"$group": {
@@ -242,12 +253,19 @@ async def aggregate_event_totals(event_id: str):
             "count": {"$sum": 1},
             "members": {"$sum": {"$ifNull": ["$num_members", 1]}},
             "non_members": {"$sum": {"$ifNull": ["$num_non_members", 0]}},
+            "paid_members": {"$sum": {"$cond": [{"$eq": ["$paid", True]}, {"$ifNull": ["$num_members", 1]}, 0]}},
+            "paid_non_members": {"$sum": {"$cond": [{"$eq": ["$paid", True]}, {"$ifNull": ["$num_non_members", 0]}, 0]}},
         }},
     ]
     agg = await db.participants.aggregate(pipeline).to_list(1)
     if agg:
-        return agg[0]["count"], int(agg[0]["members"]), int(agg[0]["non_members"])
-    return 0, 0, 0
+        a = agg[0]
+        members = int(a["members"])
+        non_members = int(a["non_members"])
+        expected = members * price_m + non_members * price_nm
+        paid = int(a["paid_members"]) * price_m + int(a["paid_non_members"]) * price_nm
+        return a["count"], members, non_members, expected, paid
+    return 0, 0, 0, 0.0, 0.0
 
 
 # ----- Excel parsing -----
@@ -286,12 +304,50 @@ def clean_str(v) -> str:
 
 
 # ----- Auth Endpoints -----
+MAX_LOGIN_ATTEMPTS = 5
+LOCKOUT_MINUTES = 15
+
+
+async def check_lockout(identifier: str):
+    rec = await db.login_attempts.find_one({"_id": identifier})
+    if not rec:
+        return
+    locked_until = rec.get("locked_until")
+    if locked_until:
+        try:
+            lu = datetime.fromisoformat(locked_until)
+        except Exception:
+            return
+        if lu > datetime.now(timezone.utc):
+            mins = max(1, int((lu - datetime.now(timezone.utc)).total_seconds() // 60) + 1)
+            raise HTTPException(status_code=429, detail=f"For mange mislykkede forsøg. Prøv igen om {mins} min.")
+
+
+async def record_failed_login(identifier: str):
+    now = datetime.now(timezone.utc)
+    rec = await db.login_attempts.find_one({"_id": identifier})
+    count = (rec.get("count", 0) if rec else 0) + 1
+    update = {"count": count, "last_at": now.isoformat()}
+    if count >= MAX_LOGIN_ATTEMPTS:
+        update["locked_until"] = (now + timedelta(minutes=LOCKOUT_MINUTES)).isoformat()
+        update["count"] = 0
+    await db.login_attempts.update_one({"_id": identifier}, {"$set": update}, upsert=True)
+
+
+async def clear_failed_login(identifier: str):
+    await db.login_attempts.delete_one({"_id": identifier})
+
+
 @api.post("/auth/login")
-async def login(payload: LoginIn, response: Response):
+async def login(payload: LoginIn, request: Request, response: Response):
     email = payload.email.lower().strip()
+    identifier = email
+    await check_lockout(identifier)
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(payload.password, user["password_hash"]):
+        await record_failed_login(identifier)
         raise HTTPException(status_code=401, detail="Forkert email eller adgangskode")
+    await clear_failed_login(identifier)
     token = create_access_token(str(user["_id"]), user["email"], user.get("role", "user"))
     response.set_cookie(
         key="access_token", value=token, httponly=True,
@@ -466,8 +522,8 @@ async def import_members(file: UploadFile = File(...), _admin: dict = Depends(re
 async def list_events(_user: dict = Depends(get_current_user)):
     items = []
     async for ev in db.events.find({}).sort("event_date", -1):
-        count, members, non_members = await aggregate_event_totals(str(ev["_id"]))
-        items.append(event_to_out(ev, count, members, non_members))
+        count, members, non_members, expected, paid = await aggregate_event_totals(str(ev["_id"]))
+        items.append(event_to_out(ev, count, members, non_members, expected, paid))
     return items
 
 
@@ -484,7 +540,7 @@ async def create_event(payload: EventIn, _admin: dict = Depends(require_admin)):
     }
     res = await db.events.insert_one(doc)
     doc["_id"] = res.inserted_id
-    return event_to_out(doc, 0, 0, 0)
+    return event_to_out(doc, 0, 0, 0, 0.0, 0.0)
 
 
 @api.get("/events/{event_id}", response_model=EventOut)
@@ -492,8 +548,8 @@ async def get_event(event_id: str, _user: dict = Depends(get_current_user)):
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
     if not ev:
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
-    count, members, non_members = await aggregate_event_totals(event_id)
-    return event_to_out(ev, count, members, non_members)
+    count, members, non_members, expected, paid = await aggregate_event_totals(event_id)
+    return event_to_out(ev, count, members, non_members, expected, paid)
 
 
 @api.patch("/events/{event_id}", response_model=EventOut)
@@ -510,8 +566,8 @@ async def update_event(event_id: str, payload: EventIn, _admin: dict = Depends(r
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
     if not ev:
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
-    count, members, non_members = await aggregate_event_totals(event_id)
-    return event_to_out(ev, count, members, non_members)
+    count, members, non_members, expected, paid = await aggregate_event_totals(event_id)
+    return event_to_out(ev, count, members, non_members, expected, paid)
 
 
 @api.delete("/events/{event_id}")
@@ -589,6 +645,49 @@ async def remove_participant(event_id: str, participant_id: str, _admin: dict = 
     if not res.deleted_count:
         raise HTTPException(status_code=404, detail="Tilmelding ikke fundet")
     return {"ok": True}
+
+
+@api.get("/events/{event_id}/participants/export")
+async def export_participants_csv(event_id: str, _user: dict = Depends(get_current_user)):
+    """CSV export with check-in column for printing."""
+    ev = await db.events.find_one({"_id": ObjectId(event_id)})
+    if not ev:
+        raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
+    from fastapi.responses import Response as _Response
+    import csv as _csv
+    import io as _io
+    buf = _io.StringIO()
+    buf.write("\ufeff")  # BOM for Excel
+    writer = _csv.writer(buf, delimiter=";")
+    writer.writerow([
+        "Medlemsnr", "Navn", "Adresse", "Email", "Telefon",
+        "Antal medl.", "Antal ikke-medl.", "Antal i alt", "Betalt", "Note", "Mødt op"
+    ])
+    cursor = db.participants.find({"event_id": event_id}).sort("navn", 1)
+    async for p in cursor:
+        nm = int(p.get("num_members", 1) or 0)
+        nnm = int(p.get("num_non_members", 0) or 0)
+        addr = str(p.get("adresse", "")).replace("\n", ", ")
+        writer.writerow([
+            p.get("medlemsnummer", ""),
+            p.get("navn", ""),
+            addr,
+            p.get("email", ""),
+            p.get("telefon", ""),
+            nm,
+            nnm,
+            nm + nnm,
+            "Ja" if p.get("paid") else "Nej",
+            p.get("note", ""),
+            "",  # blank check-in column for at krydse af ved indgang
+        ])
+    title = (ev.get("title") or "arrangement").replace(" ", "_")
+    filename = f"deltagere_{title}_{event_id}.csv"
+    return _Response(
+        content=buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ----- Stats -----

@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 2 testing complete. Added /app/backend/tests/test_iteration2.py covering event prices+aggregates, PATCH event, PATCH participant (subset fields), CSV export (header + Mødt op blank column + BOM + content-disposition), and brute-force lockout (5 fails → 429, success resets counter). 19/19 pytest tests pass (13 regression + 6 new). All required UI flows verified end-to-end as admin and as non-admin: finance widget shows correct kr. values, add-participant updates totals, edit-participant dialog updates participant counts/notes and recomputes finance, paid-checkbox toggles primary tint AND updates finance-paid, edit-event dialog updates title/prices in header, CSV export endpoint returns 200 with correct headers, all admin-only controls correctly hidden for non-admin while paid-checkbox is present but disabled and export-csv-button stays visible.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "EventDetailPage participant row", "issues": ["data-testid='participant-count-<id>' wraps both the big count number and the breakdown line, so text_content returns '32 medl. · 1 ikke-m.' (concatenated). UI rendering is correct (line break separates them visually) but for tests/scrapers the testid should wrap only the numeric total, with a separate testid (e.g. participant-breakdown-<id>) for the breakdown."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_iteration2.py",
+    "/app/test_reports/pytest/all_results.xml",
+    "/app/test_reports/pytest/iteration2_results.xml"
+  ],
+  "action_items": [
+    "(Optional, low-priority) Split participant-count-<id> testid into total + breakdown testids so automation can read the numeric total alone.",
+    "(Optional, hardening) Restrict CORS allow_origin_regex='.*' to a CORS_ORIGINS allowlist in production.",
+    "(Optional) Wrap ObjectId(...) calls in /api/events/{id}, /api/members/{id}, /api/events/{id}/participants/{pid} in try/except to return 404 instead of 500 for malformed IDs (carried over from iteration 1)."
+  ],
+  "critical_code_review_comments": [
+    "server.py:331-334 record_failed_login: when count reaches MAX_LOGIN_ATTEMPTS the counter is reset to 0 alongside setting locked_until. That means after the lockout window expires, a single new failure would NOT trigger another lockout (counter restarts from 1). Acceptable for now but worth noting — alternatively keep count at MAX so any further failed attempt during/after the window keeps the user locked.",
+    "server.py:311-323 check_lockout: identifier is the email lowercase. Brute force from many IPs against the SAME user gets locked, but the same attacker rotating emails won't be rate-limited. Consider adding IP-based limiting in addition.",
+    "server.py:651 export_participants_csv allowed for any authenticated user (get_current_user, not require_admin). Spec says read-only export is OK for users — implementation matches spec.",
+    "server.py:556-570 update_event uses EventIn (all fields required by Pydantic defaults). PATCH semantics are 'full replace' here; if a future caller sends only title, description/location/event_date/prices would be overwritten with their defaults. Works for current dialog (which always sends all fields) but not a strict PATCH.",
+    "server.py:244-268 aggregate_event_totals fires an extra db.events.find_one per event in list_events – O(N) round-trips. For 0..100 events fine; for hundreds, consider $lookup or pre-joining prices in pipeline."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration2.py"
+  ],
+  "success_rate": {"backend": "100% (19/19 pytest)", "frontend": "100% (all iteration 2 flows verified, admin + non-admin)"},
+  "test_credentials": "Admin: tdeele@gmail.com / Fransen123!!! ; Non-admin: testuser_qa@example.com / Test1234!",
+  "seed_data_creation": "Created and CLEANED UP one event 'UI Test Arrangement v2' during UI test. Brute-force test used fake email 'doesnotexist_qa@example.com' so the real admin was never locked. login_attempts collection fully cleared after tests (delete_many({})).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All iteration 2 features verified. /app/backend/tests/test_iteration2.py is the regression suite for finance widget + CSV export + brute-force lockout. Run with: pytest /app/backend/tests/ -v. Note: brute-force test uses fake email; if you ever brute-force against the admin email, run db.login_attempts.delete_many({}) afterwards. Iteration 1's add-participant dialog auto-close bug appears FIXED (dialog auto-closes after participant-confirm-add).",
+  "rca of the issue": "No bugs found in iteration 2 scope. All endpoints, aggregates, CSV format (BOM + 11 columns with empty Mødt op), and brute-force flow behave per spec."
+}
