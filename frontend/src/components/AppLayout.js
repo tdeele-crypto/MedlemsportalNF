@@ -7,9 +7,10 @@ import {
   Calendar,
   UserCog,
   LogOut,
-  Leaf,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const LOGO_URL = "https://customer-assets.emergentagent.com/job_member-events-3/artifacts/zysp8e23_nflogo.jpg";
 
 const navItems = [
   { to: "/", label: "Oversigt", icon: LayoutDashboard, end: true, key: "dashboard" },
@@ -36,7 +37,7 @@ export default function AppLayout() {
       {/* Sidebar */}
       <aside className="hidden md:flex md:flex-col w-64 border-r border-border bg-white">
         <div className="h-16 flex items-center gap-2 px-6 border-b border-border">
-          <Leaf className="w-5 h-5 text-primary" strokeWidth={1.5} />
+          <img src={LOGO_URL} alt="Nyreforeningen" className="w-7 h-7 object-contain" />
           <span className="font-semibold tracking-tight text-foreground">Medlemsportal</span>
         </div>
         <nav className="flex-1 px-3 py-6 space-y-1">
@@ -84,7 +85,7 @@ export default function AppLayout() {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="md:hidden h-14 px-4 flex items-center justify-between border-b border-border bg-white">
           <div className="flex items-center gap-2">
-            <Leaf className="w-5 h-5 text-primary" strokeWidth={1.5} />
+            <img src={LOGO_URL} alt="Nyreforeningen" className="w-7 h-7 object-contain" />
             <span className="font-semibold tracking-tight text-sm">Medlemsportal</span>
           </div>
           <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="logout-button-mobile">

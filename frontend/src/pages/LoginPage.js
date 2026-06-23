@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatApiError } from "@/lib/api";
-import { Leaf } from "lucide-react";
+
+const LOGO_URL = "https://customer-assets.emergentagent.com/job_member-events-3/artifacts/zysp8e23_nflogo.jpg";
 
 export default function LoginPage() {
   const { user, login } = useAuth();
@@ -35,7 +36,7 @@ export default function LoginPage() {
     <div className="min-h-screen grid lg:grid-cols-2" data-testid="login-page">
       <div className="login-bg hidden lg:flex flex-col justify-between p-12 text-white">
         <div className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-          <Leaf className="w-5 h-5" strokeWidth={1.5} />
+          <img src={LOGO_URL} alt="Nyreforeningen" className="w-8 h-8 object-contain bg-white rounded-md p-0.5" />
           <span>Medlemsportal</span>
         </div>
         <div>
@@ -53,7 +54,7 @@ export default function LoginPage() {
       <div className="flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-md">
           <div className="lg:hidden flex items-center gap-2 mb-8 text-primary font-semibold">
-            <Leaf className="w-5 h-5" strokeWidth={1.5} />
+            <img src={LOGO_URL} alt="Nyreforeningen" className="w-7 h-7 object-contain" />
             <span>Medlemsportal</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
