@@ -672,6 +672,14 @@ export default function EventDetailPage() {
                 data-testid="edit-event-title-input"
               />
             </div>
+            <div className="space-y-2">
+              <Label>Billede</Label>
+              <EventImageUpload
+                value={eventForm.image_path}
+                onChange={(p) => setEventForm({ ...eventForm, image_path: p })}
+                data-testid="edit-event-image-upload"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="ev-date">Dato</Label>
