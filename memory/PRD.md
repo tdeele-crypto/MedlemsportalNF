@@ -26,20 +26,25 @@ Arrangement og medlems check app: Webapp skal både have frontend og backend, me
 - ✅ User CRUD (admin)
 - ✅ Excel parser → parses `Medlemskaber` into `medlemstype` + `bladstatus`
 - ✅ Member list + wildcard regex search
-- ✅ Event CRUD
-- ✅ Participant add/edit-note/delete
+- ✅ Event CRUD (incl. UI edit dialog with gear icon)
+- ✅ Participant add/edit (counts + note via dialog) / delete
+- ✅ Per-tilmelding antal medlemmer + antal ikke-medlemmer
+- ✅ Priser pr. arrangement (medlem / ikke-medlem)
+- ✅ Betalt-checkbox pr. tilmelding (admin toggle)
+- ✅ Økonomi-widget: Forventet / Betalt / Mangler
+- ✅ CSV-eksport af deltagerliste med "Mødt op"-kolonne (check-in liste)
+- ✅ Brute force beskyttelse på /api/auth/login (5 forsøg → 15 min lockout)
 - ✅ Dashboard with stats + recent events
 - ✅ Danish UI throughout, modern minimalist green/off-white design
-- ✅ 13/13 backend tests passing; full E2E flows verified
+- ✅ 19/19 backend tests passing; full E2E flows verified iteration 2
 
 ## Backlog
-- **P1**: Brute-force protection + rate limit on /api/auth/login
-- **P1**: CSV export of event participants (printable check-in liste)
-- **P2**: Email reminders to participants (Resend integration)
-- **P2**: Edit existing event (UI button — backend already supports PATCH)
-- **P2**: Member detail page with attendance history
-- **P3**: Bulk member delete; Mongo text index on members
+- **P2**: Email reminders til tilmeldte (Resend integration)
+- **P2**: Medlems-detaljeside med tilmeldingshistorik
+- **P3**: IP-baseret brute force i tillæg til email-baseret
+- **P3**: Restrict CORS allowlist i produktion
 - **P3**: i18n (currently DK-only)
+- **P3**: 404 i stedet for 500 ved malformed ObjectId i URLs
 
 ## Files
 - Backend: `/app/backend/server.py`
