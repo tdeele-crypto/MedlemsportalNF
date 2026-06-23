@@ -1,0 +1,122 @@
+{
+  "theme_and_archetype": {
+    "domain": "Association Admin Dashboard (Health/Wellness adjacent)",
+    "theme": "Light",
+    "archetype": "1 (Organic & Earthy) blended with Minimalist Swiss",
+    "reasoning": "A Danish kidney foundation management tool used by volunteers. The UI should evoke trust, calm, and professionalism (Nordic minimalism), entirely avoiding generic SaaS 'tech-bro' or purple themes. Earthy tones blended with sharp Swiss-style utility for data heavy views."
+  },
+  "typography": {
+    "strategy": "Soft Utility Dashboard Pairing",
+    "headings": {
+      "font_family": "Manrope",
+      "weights": ["400", "700", "800"],
+      "usage_rules": "Tight tracking (tracking-tight) for h1 and h2. Use bold for primary emphasis, but keep h3/h4 in medium/regular weight for subtle hierarchy.",
+      "scales": {
+        "h1": "text-3xl sm:text-4xl",
+        "h2": "text-2xl sm:text-3xl",
+        "h3": "text-xl",
+        "h4": "text-lg"
+      }
+    },
+    "body": {
+      "font_family": "Work Sans",
+      "weights": ["400", "500"],
+      "usage_rules": "Clean, highly legible sans for data density. Relaxed line height (leading-relaxed) for reading, tight for data tables.",
+      "scales": {
+        "base": "text-base",
+        "small": "text-sm",
+        "tiny": "text-xs uppercase tracking-wider"
+      }
+    }
+  },
+  "color_palette": {
+    "base": {
+      "background": "#F9F9F8", 
+      "surface": "#FFFFFF",
+      "surface_alt": "#F3F4F1"
+    },
+    "primary": {
+      "main": "#2C4C3B", 
+      "hover": "#3D624E",
+      "light": "#E8EFEA",
+      "foreground": "#FFFFFF"
+    },
+    "secondary": {
+      "main": "#8C7C61",
+      "hover": "#A19073",
+      "light": "#F5F3EF",
+      "foreground": "#FFFFFF"
+    },
+    "text": {
+      "primary": "#1A1D1A",
+      "secondary": "#5C615C",
+      "disabled": "#A3A8A3"
+    },
+    "borders": {
+      "light": "#E5E7E2",
+      "medium": "#D1D5CE",
+      "focus": "#2C4C3B"
+    },
+    "status": {
+      "success": "#417A57",
+      "warning": "#B88E35",
+      "error": "#B94A4A",
+      "info": "#4A6E82"
+    },
+    "rules": [
+      "Use #2C4C3B (Deep Forest Green) exclusively for primary CTAs to indicate action.",
+      "Never use pure black or grey; all neutrals are tinted towards a warm olive/sand hue.",
+      "Maintain 4.5:1 contrast for all text against backgrounds.",
+      "Hover states must shift to a lighter hue of the active color."
+    ]
+  },
+  "layout_and_spacing": {
+    "strategy": "The 'Control Room' Grid - Dense, functional, cardless emphasis",
+    "sidebar": "Fixed left sidebar on desktop (w-64), hidden on mobile behind hamburger.",
+    "spacing_scale": "p-1, p-2, p-4, p-6, p-8, p-12",
+    "generous_spacing": "Use padding generously in container boundaries (p-8 or p-12 on desktop) to give data breathing room.",
+    "alignment": "Left-align tables, dense content, and forms. Use optical alignment for icons/buttons.",
+    "grid_usage": {
+      "dashboard_overview": "grid-cols-1 md:grid-cols-3 gap-6. Summary widgets span 1 col, main tables span 2 or 3 cols."
+    }
+  },
+  "component_rules": {
+    "framework": "React JS (.js/.jsx) with Tailwind CSS and Shadcn UI.",
+    "surfaces": "Grid Borders and Flat Surfaces. Avoid heavy drop shadows. Use 1px borders (#E5E7E2) to define areas. If using shadows, use extremely soft ambient shadow (shadow-sm).",
+    "border_radius": "Subtle roundness: rounded-md (6px) or rounded-sm (4px). Avoid pill shapes.",
+    "forms_and_inputs": "Shadcn UI base. Flat look, 1px border. Focus state must use ring-2 ring-primary/20 and border-primary.",
+    "tables": "Shadcn Table. Flat design, hover states on rows (bg-surface_alt). No vertical borders, subtle horizontal dividers.",
+    "buttons": "Flat solid background for primary. Ghost buttons for secondary actions to reduce visual clutter.",
+    "modals": "Solid white backgrounds (no glassmorphism). Minimalist header, clear primary/secondary actions at bottom right."
+  },
+  "motion_and_interactions": {
+    "hover_states": "Subtle background color shift on rows/cards. Links change to primary color.",
+    "transitions": "transition-colors duration-200 ease-in-out for buttons and inputs.",
+    "loading": "Use minimalist spinners or skeleton loaders in #F3F4F1."
+  },
+  "icons_and_assets": {
+    "library": "lucide-react",
+    "usage": "Use stroke-width 1.5 for a cleaner, modern look. Keep sizes to 16px (w-4 h-4) or 20px (w-5 h-5).",
+    "image_urls": [
+      {
+        "category": "login_background",
+        "url": "https://images.pexels.com/photos/29939375/pexels-photo-29939375.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Minimalist green gradient texture for the login split-screen background."
+      }
+    ]
+  },
+  "accessibility_and_testing": {
+    "contrast": "Ensure all text meets WCAG AA standards. Use text-white on primary buttons.",
+    "focus": "Visible focus rings on all interactive elements via focus-visible:ring-2.",
+    "data_testid": "ALL interactive elements (buttons, inputs, row actions) MUST have a data-testid attribute formatted as kebab-case-role."
+  },
+  "instructions_to_main_agent": [
+    "Build the dashboard using a modern minimalist aesthetic: mostly white/off-white with subtle grey/green-tinted borders. Code should be in .js/.jsx.",
+    "Implement a Sidebar layout for authenticated views (Admin vs User).",
+    "In the members list and event detail page, use Shadcn tables to render data cleanly.",
+    "For the file import (Excel to JSON), use an elegant file dropzone component. No complex visual flair needed, just clear instructions.",
+    "Use Manrope for headings and Work Sans for body text.",
+    "Inject the login_background image in a split-screen design for the authentication page.",
+    "Avoid using card components excessively. Instead, use sections with subtle borders and generous padding to group content."
+  ]
+}
