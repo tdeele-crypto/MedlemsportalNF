@@ -18,6 +18,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Calendar, MapPin, Plus, Search, Trash2, Pencil, Download, Settings2, ScanLine, Send } from "lucide-react";
 import { toast } from "sonner";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
+import EventImageUpload from "@/components/EventImageUpload";
+import StoredImage from "@/components/StoredImage";
 
 const fmtKr = (n) => `${Math.round((Number(n) || 0) * 100) / 100} kr.`;
 
@@ -49,6 +51,7 @@ export default function EventDetailPage() {
   const [eventForm, setEventForm] = useState({
     title: "", description: "", location: "", address: "", event_date: "", event_time: "", price_member: "", price_non_member: "",
     email_on_register: true, email_on_paid: true, email_on_reminder: true,
+    image_path: null,
   });
 
   const loadEvent = useCallback(async () => {
@@ -162,6 +165,7 @@ export default function EventDetailPage() {
       email_on_register: event.email_on_register !== false,
       email_on_paid: event.email_on_paid !== false,
       email_on_reminder: event.email_on_reminder !== false,
+      image_path: event.image_path || null,
     });
     setEventEditOpen(true);
   };
@@ -208,6 +212,17 @@ export default function EventDetailPage() {
         <ArrowLeft className="w-4 h-4 mr-1" strokeWidth={1.6} />
         Tilbage til arrangementer
       </Link>
+
+      {event.image_path && (
+        <div className="mt-4 rounded-md overflow-hidden border border-border bg-muted">
+          <StoredImage
+            path={event.image_path}
+            className="w-full h-48 sm:h-64 object-cover"
+            alt={event.title}
+            data-testid="event-hero-image"
+          />
+        </div>
+      )}
 
       <div className="mt-4 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div className="min-w-0">

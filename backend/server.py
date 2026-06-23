@@ -22,7 +22,9 @@ from pydantic import BaseModel, Field, EmailStr, BeforeValidator, ConfigDict
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from zoneinfo import ZoneInfo
+from fastapi.responses import Response as FastResponse
 import email_utils
+import storage_utils
 
 
 # ----- Logging -----
@@ -147,6 +149,7 @@ class EventIn(BaseModel):
     email_on_register: bool = True
     email_on_paid: bool = True
     email_on_reminder: bool = True
+    image_path: Optional[str] = None
 
 
 class EventOut(BaseModel):
@@ -161,6 +164,7 @@ class EventOut(BaseModel):
     email_on_register: bool = True
     email_on_paid: bool = True
     email_on_reminder: bool = True
+    image_path: Optional[str] = None
     price_member: float = 0
     price_non_member: float = 0
     participant_count: int = 0
@@ -237,6 +241,7 @@ def event_to_out(doc, count: int = 0, total_members: int = 0, total_non_members:
         "email_on_register": bool(doc.get("email_on_register", True)),
         "email_on_paid": bool(doc.get("email_on_paid", True)),
         "email_on_reminder": bool(doc.get("email_on_reminder", True)),
+        "image_path": doc.get("image_path"),
         "participant_count": count,
         "total_members": total_members,
         "total_non_members": total_non_members,
@@ -572,6 +577,7 @@ async def create_event(payload: EventIn, _admin: dict = Depends(require_admin)):
         "email_on_register": bool(payload.email_on_register),
         "email_on_paid": bool(payload.email_on_paid),
         "email_on_reminder": bool(payload.email_on_reminder),
+        "image_path": payload.image_path,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     res = await db.events.insert_one(doc)
@@ -601,6 +607,7 @@ async def update_event(event_id: str, payload: EventIn, _admin: dict = Depends(r
         "email_on_register": bool(payload.email_on_register),
         "email_on_paid": bool(payload.email_on_paid),
         "email_on_reminder": bool(payload.email_on_reminder),
+        "image_path": payload.image_path,
     }
     await db.events.update_one({"_id": ObjectId(event_id)}, {"$set": update})
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
@@ -763,12 +770,85 @@ async def root():
     return {"message": "Medlems- og Arrangementsapp API"}
 
 
+# ----- Image upload (event covers) -----
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+@api.post("/uploads/image")
+async def upload_image(file: UploadFile = File(...), _admin: dict = Depends(require_admin)):
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Kun JPG, PNG, WebP eller GIF tilladt")
+    data = await file.read()
+    if len(data) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=400, detail="Billede er for stort (max 10 MB)")
+    if len(data) == 0:
+        raise HTTPException(status_code=400, detail="Tom fil")
+    ext_map = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
+    ext = ext_map.get(file.content_type, "bin")
+    app_name = os.environ.get("APP_NAME", "medlemsportal")
+    path = f"{app_name}/events/{uuid.uuid4()}.{ext}"
+    try:
+        result = storage_utils.put_object(path, data, file.content_type)
+    except Exception as e:
+        logger.error("Image upload failed: %s", e)
+        raise HTTPException(status_code=500, detail="Kunne ikke uploade billede")
+    stored_path = result.get("path") or path
+    await db.files.insert_one({
+        "storage_path": stored_path,
+        "original_filename": file.filename,
+        "content_type": file.content_type,
+        "size": len(data),
+        "is_deleted": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"path": stored_path, "size": len(data), "content_type": file.content_type}
+
+
+@api.get("/files/{path:path}")
+async def get_file(path: str, request: Request, auth: Optional[str] = Query(None)):
+    # Allow auth via cookie, Bearer header, or ?auth= query param (for <img src>)
+    if not request.cookies.get("access_token") and not request.headers.get("Authorization") and auth:
+        # Synthesize a fake Authorization header by re-invoking get_current_user logic
+        pass
+    try:
+        if auth and not request.cookies.get("access_token") and not request.headers.get("Authorization"):
+            # decode the token directly
+            try:
+                payload = pyjwt.decode(auth, JWT_SECRET, algorithms=[JWT_ALGO])
+                if payload.get("type") != "access":
+                    raise HTTPException(status_code=401, detail="Ugyldigt token")
+            except pyjwt.ExpiredSignatureError:
+                raise HTTPException(status_code=401, detail="Session udløbet")
+            except pyjwt.InvalidTokenError:
+                raise HTTPException(status_code=401, detail="Ugyldigt token")
+        else:
+            await get_current_user(request)
+    except HTTPException:
+        raise
+    record = await db.files.find_one({"storage_path": path, "is_deleted": False})
+    if not record:
+        raise HTTPException(status_code=404, detail="Fil ikke fundet")
+    try:
+        data, content_type = storage_utils.get_object(path)
+    except Exception as e:
+        logger.error("File download failed: %s", e)
+        raise HTTPException(status_code=500, detail="Kunne ikke hente fil")
+    return FastResponse(content=data, media_type=record.get("content_type", content_type),
+                        headers={"Cache-Control": "public, max-age=3600"})
+
+
 # ----- Startup -----
 @app.on_event("startup")
 async def on_startup():
     await db.users.create_index("email", unique=True)
     await db.members.create_index("medlemsnummer", unique=True)
     await db.participants.create_index([("event_id", 1)])
+    # Init object storage
+    try:
+        storage_utils.init_storage()
+    except Exception as e:
+        logger.warning("Storage init at startup failed: %s", e)
     # Seed admin
     admin_email = os.environ.get("ADMIN_EMAIL", "").lower().strip()
     admin_password = os.environ.get("ADMIN_PASSWORD", "")

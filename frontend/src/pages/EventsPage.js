@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
+import EventImageUpload from "@/components/EventImageUpload";
+import StoredImage from "@/components/StoredImage";
 import {
   Dialog,
   DialogContent,
@@ -16,7 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, Calendar, MapPin, ArrowRight } from "lucide-react";
+import { Plus, Calendar, MapPin, ArrowRight, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 
 export default function EventsPage() {
@@ -50,7 +52,7 @@ export default function EventsPage() {
         price_non_member: Number(form.price_non_member) || 0,
       });
       setOpen(false);
-      setForm({ title: "", description: "", location: "", address: "", event_date: "", event_time: "", price_member: "", price_non_member: "", email_on_register: true, email_on_paid: true, email_on_reminder: true });
+      setForm({ title: "", description: "", location: "", address: "", event_date: "", event_time: "", price_member: "", price_non_member: "", email_on_register: true, email_on_paid: true, email_on_reminder: true, image_path: null });
       await load();
       toast.success("Arrangement oprettet");
     } catch (err) {
@@ -93,6 +95,14 @@ export default function EventsPage() {
                     onChange={(e) => setForm({ ...form, title: e.target.value })}
                     required
                     data-testid="event-title-input"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Billede (valgfri)</Label>
+                  <EventImageUpload
+                    value={form.image_path}
+                    onChange={(p) => setForm({ ...form, image_path: p })}
+                    data-testid="event-image-upload"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -236,11 +246,22 @@ export default function EventsPage() {
             to={`/arrangementer/${ev.id}`}
             key={ev.id}
             data-testid={`event-card-${ev.id}`}
-            className="group border border-border rounded-md bg-white p-6 hover:border-primary/40 transition-colors"
+            className="group border border-border rounded-md bg-white overflow-hidden hover:border-primary/40 transition-colors flex flex-col"
           >
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-lg text-foreground truncate">{ev.title}</h3>
+            {ev.image_path ? (
+              <StoredImage
+                path={ev.image_path}
+                className="w-full h-36 object-cover"
+                alt={ev.title}
+                data-testid={`event-card-image-${ev.id}`}
+              />
+            ) : (
+              <div className="w-full h-2 bg-primary/10" />
+            )}
+            <div className="p-6 flex-1 flex flex-col">
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-lg text-foreground truncate">{ev.title}</h3>
                 <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                   {ev.event_date && (
                     <div className="flex items-center gap-2">
@@ -284,6 +305,7 @@ export default function EventsPage() {
                   <div>{ev.price_non_member} kr. / ikke-medl.</div>
                 </div>
               )}
+            </div>
             </div>
           </Link>
         ))}
