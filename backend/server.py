@@ -153,6 +153,7 @@ class EventOut(BaseModel):
     total_attendees: int = 0
     total_members: int = 0
     total_non_members: int = 0
+    checked_in_attendees: int = 0
     expected_revenue: float = 0
     paid_revenue: float = 0
     outstanding_revenue: float = 0
@@ -171,6 +172,7 @@ class ParticipantOut(BaseModel):
     num_members: int = 1
     num_non_members: int = 0
     paid: bool = False
+    checked_in: bool = False
     added_at: str
 
 
@@ -186,6 +188,7 @@ class UpdateParticipantIn(BaseModel):
     num_members: Optional[int] = None
     num_non_members: Optional[int] = None
     paid: Optional[bool] = None
+    checked_in: Optional[bool] = None
 
 
 # ----- Mongo doc helpers -----
@@ -203,7 +206,8 @@ def member_to_out(doc) -> dict:
 
 
 def event_to_out(doc, count: int = 0, total_members: int = 0, total_non_members: int = 0,
-                 expected_revenue: float = 0.0, paid_revenue: float = 0.0) -> dict:
+                 expected_revenue: float = 0.0, paid_revenue: float = 0.0,
+                 checked_in_attendees: int = 0) -> dict:
     return {
         "id": str(doc["_id"]),
         "title": doc.get("title", ""),
@@ -217,6 +221,7 @@ def event_to_out(doc, count: int = 0, total_members: int = 0, total_non_members:
         "total_members": total_members,
         "total_non_members": total_non_members,
         "total_attendees": total_members + total_non_members,
+        "checked_in_attendees": checked_in_attendees,
         "expected_revenue": round(expected_revenue, 2),
         "paid_revenue": round(paid_revenue, 2),
         "outstanding_revenue": round(max(0.0, expected_revenue - paid_revenue), 2),
@@ -237,12 +242,13 @@ def participant_to_out(doc) -> dict:
         "num_members": int(doc.get("num_members", 1) or 0),
         "num_non_members": int(doc.get("num_non_members", 0) or 0),
         "paid": bool(doc.get("paid", False)),
+        "checked_in": bool(doc.get("checked_in", False)),
         "added_at": doc.get("added_at", ""),
     }
 
 
 async def aggregate_event_totals(event_id: str):
-    """Returns (count, total_members, total_non_members, expected_revenue, paid_revenue)."""
+    """Returns (count, total_members, total_non_members, expected_revenue, paid_revenue, checked_in_attendees)."""
     ev = await db.events.find_one({"_id": ObjectId(event_id)}) if ObjectId.is_valid(event_id) else None
     price_m = float((ev or {}).get("price_member", 0) or 0)
     price_nm = float((ev or {}).get("price_non_member", 0) or 0)
@@ -255,6 +261,9 @@ async def aggregate_event_totals(event_id: str):
             "non_members": {"$sum": {"$ifNull": ["$num_non_members", 0]}},
             "paid_members": {"$sum": {"$cond": [{"$eq": ["$paid", True]}, {"$ifNull": ["$num_members", 1]}, 0]}},
             "paid_non_members": {"$sum": {"$cond": [{"$eq": ["$paid", True]}, {"$ifNull": ["$num_non_members", 0]}, 0]}},
+            "checked_in": {"$sum": {"$cond": [{"$eq": ["$checked_in", True]},
+                                              {"$add": [{"$ifNull": ["$num_members", 1]}, {"$ifNull": ["$num_non_members", 0]}]},
+                                              0]}},
         }},
     ]
     agg = await db.participants.aggregate(pipeline).to_list(1)
@@ -264,8 +273,9 @@ async def aggregate_event_totals(event_id: str):
         non_members = int(a["non_members"])
         expected = members * price_m + non_members * price_nm
         paid = int(a["paid_members"]) * price_m + int(a["paid_non_members"]) * price_nm
-        return a["count"], members, non_members, expected, paid
-    return 0, 0, 0, 0.0, 0.0
+        checked_in = int(a.get("checked_in", 0) or 0)
+        return a["count"], members, non_members, expected, paid, checked_in
+    return 0, 0, 0, 0.0, 0.0, 0
 
 
 # ----- Excel parsing -----
@@ -522,8 +532,8 @@ async def import_members(file: UploadFile = File(...), _admin: dict = Depends(re
 async def list_events(_user: dict = Depends(get_current_user)):
     items = []
     async for ev in db.events.find({}).sort("event_date", -1):
-        count, members, non_members, expected, paid = await aggregate_event_totals(str(ev["_id"]))
-        items.append(event_to_out(ev, count, members, non_members, expected, paid))
+        count, members, non_members, expected, paid, checked_in = await aggregate_event_totals(str(ev["_id"]))
+        items.append(event_to_out(ev, count, members, non_members, expected, paid, checked_in))
     return items
 
 
@@ -540,7 +550,7 @@ async def create_event(payload: EventIn, _admin: dict = Depends(require_admin)):
     }
     res = await db.events.insert_one(doc)
     doc["_id"] = res.inserted_id
-    return event_to_out(doc, 0, 0, 0, 0.0, 0.0)
+    return event_to_out(doc, 0, 0, 0, 0.0, 0.0, 0)
 
 
 @api.get("/events/{event_id}", response_model=EventOut)
@@ -548,8 +558,8 @@ async def get_event(event_id: str, _user: dict = Depends(get_current_user)):
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
     if not ev:
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
-    count, members, non_members, expected, paid = await aggregate_event_totals(event_id)
-    return event_to_out(ev, count, members, non_members, expected, paid)
+    count, members, non_members, expected, paid, checked_in = await aggregate_event_totals(event_id)
+    return event_to_out(ev, count, members, non_members, expected, paid, checked_in)
 
 
 @api.patch("/events/{event_id}", response_model=EventOut)
@@ -566,8 +576,8 @@ async def update_event(event_id: str, payload: EventIn, _admin: dict = Depends(r
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
     if not ev:
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
-    count, members, non_members, expected, paid = await aggregate_event_totals(event_id)
-    return event_to_out(ev, count, members, non_members, expected, paid)
+    count, members, non_members, expected, paid, checked_in = await aggregate_event_totals(event_id)
+    return event_to_out(ev, count, members, non_members, expected, paid, checked_in)
 
 
 @api.delete("/events/{event_id}")
@@ -628,6 +638,8 @@ async def update_participant(event_id: str, participant_id: str, payload: Update
         update["num_non_members"] = max(0, int(payload.num_non_members))
     if payload.paid is not None:
         update["paid"] = bool(payload.paid)
+    if payload.checked_in is not None:
+        update["checked_in"] = bool(payload.checked_in)
     if update:
         await db.participants.update_one(
             {"_id": ObjectId(participant_id), "event_id": event_id},
@@ -679,7 +691,7 @@ async def export_participants_csv(event_id: str, _user: dict = Depends(get_curre
             nm + nnm,
             "Ja" if p.get("paid") else "Nej",
             p.get("note", ""),
-            "",  # blank check-in column for at krydse af ved indgang
+            "Ja" if p.get("checked_in") else "",
         ])
     title = (ev.get("title") or "arrangement").replace(" ", "_")
     filename = f"deltagere_{title}_{event_id}.csv"

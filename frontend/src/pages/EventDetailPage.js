@@ -116,6 +116,13 @@ export default function EventDetailPage() {
     } catch (err) { toast.error(formatApiError(err)); }
   };
 
+  const handleToggleCheckedIn = async (p) => {
+    try {
+      await api.patch(`/events/${id}/participants/${p.id}`, { checked_in: !p.checked_in });
+      await loadEvent();
+    } catch (err) { toast.error(formatApiError(err)); }
+  };
+
   const openEditParticipant = (p) => {
     setEditP(p);
     setEditForm({
@@ -256,6 +263,14 @@ export default function EventDetailPage() {
           <div className="mt-1 text-xs text-muted-foreground">
             {participants.length} tilmelding{participants.length === 1 ? "" : "er"}
           </div>
+          {(event.total_attendees ?? 0) > 0 && (
+            <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium" data-testid="checked-in-summary">
+              <span data-testid="checked-in-count">{event.checked_in_attendees ?? 0}</span>
+              <span>/</span>
+              <span>{event.total_attendees}</span>
+              <span className="text-muted-foreground font-normal">mødt op</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -439,6 +454,7 @@ export default function EventDetailPage() {
               <TableHead className="hidden md:table-cell">Kontakt</TableHead>
               <TableHead className="w-28">Antal</TableHead>
               <TableHead className="w-20 text-center">Betalt</TableHead>
+              <TableHead className="w-24 text-center">Mødt op</TableHead>
               <TableHead>Note</TableHead>
               {isAdmin && <TableHead className="w-24 text-right">Handling</TableHead>}
             </TableRow>
@@ -446,7 +462,7 @@ export default function EventDetailPage() {
           <TableBody>
             {participants.length === 0 && (
               <TableRow>
-                <TableCell colSpan={isAdmin ? 7 : 6} className="text-center text-sm text-muted-foreground py-10">
+                <TableCell colSpan={isAdmin ? 8 : 7} className="text-center text-sm text-muted-foreground py-10">
                   Ingen deltagere endnu.
                 </TableCell>
               </TableRow>
@@ -481,6 +497,15 @@ export default function EventDetailPage() {
                       disabled={!isAdmin}
                       data-testid={`paid-checkbox-${p.id}`}
                       aria-label="Betalt"
+                    />
+                  </TableCell>
+                  <TableCell className="align-top text-center">
+                    <Checkbox
+                      checked={!!p.checked_in}
+                      onCheckedChange={() => isAdmin && handleToggleCheckedIn(p)}
+                      disabled={!isAdmin}
+                      data-testid={`checkin-checkbox-${p.id}`}
+                      aria-label="Mødt op"
                     />
                   </TableCell>
                   <TableCell className="align-top text-sm text-muted-foreground whitespace-pre-line">
