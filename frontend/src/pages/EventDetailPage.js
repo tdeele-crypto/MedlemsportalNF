@@ -260,12 +260,29 @@ export default function EventDetailPage() {
   };
 
   const openFacebookWindow = async () => {
-    // Copy again right before opening (in case clipboard was overwritten)
     try { await navigator.clipboard.writeText(fbShareText); } catch { /* ignore */ }
-    const backend = process.env.REACT_APP_BACKEND_URL;
-    const shareUrl = `${backend}/api/share/event/${id}`;
-    const fbShareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
-    window.open(fbShareUrl, "fbshare", "width=720,height=640,noopener=yes");
+    // Download image so the user can drag it into the FB post
+    if (event?.image_path) {
+      try {
+        const { data } = await api.get(`/files/${event.image_path}`, { responseType: "blob" });
+        const url = window.URL.createObjectURL(data);
+        const a = document.createElement("a");
+        a.href = url;
+        const ext = (event.image_path.split(".").pop() || "jpg").toLowerCase();
+        a.download = `${(event.title || "arrangement").replace(/\s+/g, "_")}.${ext}`;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+      } catch { /* ignore */ }
+    }
+    // Open the Facebook group page directly. User is already member,
+    // so they land in the group and can immediately create a post,
+    // paste the (pre-copied) text, and drag in the downloaded image.
+    let groupUrl = "https://www.facebook.com/groups/315581835133905";
+    try {
+      const { data } = await api.get("/config/facebook");
+      if (data?.group_url) groupUrl = data.group_url;
+    } catch { /* keep default */ }
+    window.open(groupUrl, "_blank", "noopener,noreferrer");
   };
 
   const copyFbText = async () => {
@@ -785,10 +802,11 @@ export default function EventDetailPage() {
             <div className="text-sm text-foreground/80 space-y-2">
               <p><strong>Sådan gør du:</strong></p>
               <ol className="list-decimal pl-5 space-y-1 text-sm">
-                <li>Klik <strong>&quot;Åbn Facebook&quot;</strong> nedenfor — Facebook åbner i et nyt vindue med billedet vedhæftet</li>
-                <li>I FB-dialogen klik i feltet <em>&quot;Hvad har du på hjerte&quot;</em></li>
-                <li>Indsæt teksten med <strong>Cmd/Ctrl + V</strong> (allerede kopieret til udklipsholder)</li>
-                <li>Vælg <strong>Nyreforeningen-gruppen</strong> i &quot;Del på&quot;-menuen og klik <strong>Slå op</strong></li>
+                <li>Klik <strong>&quot;Åbn Facebook-gruppen&quot;</strong> nedenfor — gruppen åbner i ny fane og billedet downloades</li>
+                <li>I gruppen klik <strong>&quot;Skriv noget...&quot;</strong> for at oprette et nyt opslag</li>
+                <li>Indsæt teksten med <strong>Cmd/Ctrl + V</strong> (allerede kopieret)</li>
+                <li>Træk det downloadede billede ind i opslaget</li>
+                <li>Klik <strong>Slå op</strong></li>
               </ol>
             </div>
             <div className="space-y-2">
@@ -825,7 +843,7 @@ export default function EventDetailPage() {
               data-testid="facebook-open"
             >
               <Facebook className="w-4 h-4 mr-2" strokeWidth={1.6} />
-              Åbn Facebook
+              Åbn Facebook-gruppen
             </Button>
           </DialogFooter>
         </DialogContent>
