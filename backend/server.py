@@ -266,10 +266,22 @@ async def import_members(file: UploadFile = File(...), _admin: dict = Depends(re
 # ----- Events -----
 @api.get("/events", response_model=List[EventOut])
 async def list_events(_user: dict = Depends(get_current_user)):
+    """Return events ordered: upcoming first (nearest date first),
+    then past events (most-recent first), then events without a date."""
+    today_iso = datetime.now(timezone.utc).date().isoformat()
     items = []
-    async for ev in db.events.find({}).sort("event_date", -1):
+    async for ev in db.events.find({}):
         count, members, non_members, expected, paid, checked_in = await aggregate_event_totals(db, str(ev["_id"]))
         items.append(event_to_out(ev, count, members, non_members, expected, paid, checked_in))
+
+    def sort_key(e):
+        d = e.get("event_date") or ""
+        if not d:
+            return (2, "")               # no date → bottom
+        if d >= today_iso:
+            return (0, d)                # upcoming → ascending (nearest first)
+        return (1, "-" + d)              # past → most recent past first
+    items.sort(key=sort_key)
     return items
 
 
