@@ -104,7 +104,17 @@ export default function AddParticipantDialog({
                     className="w-full text-left p-3 hover:bg-muted/50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-between gap-3"
                   >
                     <div className="min-w-0">
-                      <div className="font-medium text-sm">{m.navn}</div>
+                      <div className="font-medium text-sm flex items-center gap-2 flex-wrap">
+                        <span>{m.navn}</span>
+                        {m.medlemstype && (
+                          <span
+                            className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-primary/30 text-primary font-normal"
+                            data-testid={`search-result-medlemstype-${m.id}`}
+                          >
+                            {m.medlemstype}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-muted-foreground truncate">
                         #{m.medlemsnummer} · {m.email} · {m.telefon}
                       </div>
@@ -118,7 +128,17 @@ export default function AddParticipantDialog({
         ) : (
           <div className="space-y-4">
             <div className="border border-border rounded-md p-4 bg-muted/30">
-              <div className="font-medium">{selected.navn}</div>
+              <div className="font-medium flex items-center gap-2 flex-wrap">
+                <span>{selected.navn}</span>
+                {selected.medlemstype && (
+                  <span
+                    className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-primary/30 text-primary font-normal"
+                    data-testid="selected-medlemstype"
+                  >
+                    {selected.medlemstype}
+                  </span>
+                )}
+              </div>
               <div className="text-xs text-muted-foreground whitespace-pre-line mt-1">{selected.adresse}</div>
               <div className="text-xs text-muted-foreground mt-1">
                 #{selected.medlemsnummer} · {selected.email} · {selected.telefon}
