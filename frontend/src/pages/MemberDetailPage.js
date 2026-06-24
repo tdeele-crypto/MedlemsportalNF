@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import api, { formatApiError } from "@/lib/api";
-import { Badge } from "@/components/ui/badge";
+import MedlemstypeBadge from "@/components/MedlemstypeBadge";
 import { ArrowLeft, Mail, Newspaper, Calendar, MapPin, Check, Banknote, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 
@@ -89,11 +89,7 @@ export default function MemberDetailPage() {
             )}
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {member.medlemstype && (
-              <Badge variant="outline" className="text-xs font-normal border-primary/30 text-primary" data-testid="member-type">
-                {member.medlemstype}
-              </Badge>
-            )}
+            <MedlemstypeBadge type={member.medlemstype} testId="member-type" />
             {member.bladstatus && (
               <span className="text-xs text-muted-foreground flex items-center gap-1" data-testid="member-blad-status">
                 {member.bladstatus.includes("e-mail") ? (

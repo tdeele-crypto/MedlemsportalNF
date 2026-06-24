@@ -8,6 +8,7 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Search } from "lucide-react";
+import MedlemstypeBadge from "@/components/MedlemstypeBadge";
 import { toast } from "sonner";
 
 export default function AddParticipantDialog({
@@ -106,14 +107,11 @@ export default function AddParticipantDialog({
                     <div className="min-w-0">
                       <div className="font-medium text-sm flex items-center gap-2 flex-wrap">
                         <span>{m.navn}</span>
-                        {m.medlemstype && (
-                          <span
-                            className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-primary/30 text-primary font-normal"
-                            data-testid={`search-result-medlemstype-${m.id}`}
-                          >
-                            {m.medlemstype}
-                          </span>
-                        )}
+                        <MedlemstypeBadge
+                          type={m.medlemstype}
+                          compact
+                          testId={`search-result-medlemstype-${m.id}`}
+                        />
                       </div>
                       <div className="text-xs text-muted-foreground truncate">
                         #{m.medlemsnummer} · {m.email} · {m.telefon}
@@ -130,14 +128,7 @@ export default function AddParticipantDialog({
             <div className="border border-border rounded-md p-4 bg-muted/30">
               <div className="font-medium flex items-center gap-2 flex-wrap">
                 <span>{selected.navn}</span>
-                {selected.medlemstype && (
-                  <span
-                    className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-primary/30 text-primary font-normal"
-                    data-testid="selected-medlemstype"
-                  >
-                    {selected.medlemstype}
-                  </span>
-                )}
+                <MedlemstypeBadge type={selected.medlemstype} testId="selected-medlemstype" />
               </div>
               <div className="text-xs text-muted-foreground whitespace-pre-line mt-1">{selected.adresse}</div>
               <div className="text-xs text-muted-foreground mt-1">

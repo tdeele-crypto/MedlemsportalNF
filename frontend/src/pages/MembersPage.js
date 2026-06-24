@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import MedlemstypeBadge from "@/components/MedlemstypeBadge";
 import { Upload, Search, Mail, Newspaper } from "lucide-react";
 import { toast } from "sonner";
 
@@ -153,11 +153,7 @@ export default function MembersPage() {
                 <TableCell className="hidden md:table-cell text-sm">{m.telefon}</TableCell>
                 <TableCell className="hidden lg:table-cell">
                   <div className="flex flex-col gap-1 items-start">
-                    {m.medlemstype && (
-                      <Badge variant="outline" className="text-xs font-normal border-primary/30 text-primary">
-                        {m.medlemstype}
-                      </Badge>
-                    )}
+                    <MedlemstypeBadge type={m.medlemstype} compact />
                     {m.bladstatus && (
                       <span className="text-xs text-muted-foreground flex items-center gap-1">
                         {m.bladstatus.includes("e-mail") ? (
