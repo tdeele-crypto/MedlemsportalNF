@@ -4,26 +4,37 @@ import api, { formatApiError } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import MedlemstypeBadge from "@/components/MedlemstypeBadge";
 import { Upload, Search, Mail, Newspaper } from "lucide-react";
 import { toast } from "sonner";
+
+const ALL = "__all__";
+const MEDLEMSTYPER = [
+  "Alm. medlemskab",
+  "Livsvarigt medlemskab",
+  "Medlemskab uden opkrævning",
+];
 
 export default function MembersPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const navigate = useNavigate();
   const [q, setQ] = useState("");
+  const [medlemstype, setMedlemstype] = useState(ALL);
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const fileRef = useRef(null);
 
-  const load = useCallback(async (query) => {
+  const load = useCallback(async (query, type) => {
     setLoading(true);
     try {
-      const { data } = await api.get("/members", { params: { q: query, limit: 100 } });
+      const params = { q: query, limit: 100 };
+      if (type && type !== ALL) params.medlemstype = type;
+      const { data } = await api.get("/members", { params });
       setItems(data.items);
       setTotal(data.total);
     } catch (err) {
@@ -34,13 +45,13 @@ export default function MembersPage() {
   }, []);
 
   useEffect(() => {
-    load("");
+    load("", ALL);
   }, [load]);
 
   useEffect(() => {
-    const t = setTimeout(() => load(q), 300);
+    const t = setTimeout(() => load(q, medlemstype), 300);
     return () => clearTimeout(t);
-  }, [q, load]);
+  }, [q, medlemstype, load]);
 
   const handleFile = async (e) => {
     const f = e.target.files?.[0];
@@ -55,7 +66,7 @@ export default function MembersPage() {
       toast.success(
         `Import færdig: ${data.inserted} nye, ${data.updated} opdateret, ${data.skipped} sprunget over`
       );
-      await load(q);
+      await load(q, medlemstype);
     } catch (err) {
       toast.error(formatApiError(err));
     } finally {
@@ -96,15 +107,33 @@ export default function MembersPage() {
         )}
       </div>
 
-      <div className="mt-6 relative">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Søg på medlemsnummer, navn, adresse, telefon eller email..."
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          className="pl-9 bg-white"
-          data-testid="members-search-input"
-        />
+      <div className="mt-6 flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Søg på medlemsnummer, navn, adresse, telefon eller email..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="pl-9 bg-white"
+            data-testid="members-search-input"
+          />
+        </div>
+        <Select value={medlemstype} onValueChange={setMedlemstype}>
+          <SelectTrigger
+            className="w-full sm:w-64 bg-white"
+            data-testid="members-medlemstype-filter"
+          >
+            <SelectValue placeholder="Alle medlemstyper" />
+          </SelectTrigger>
+          <SelectContent className="bg-white">
+            <SelectItem value={ALL} data-testid="filter-all">Alle medlemstyper</SelectItem>
+            {MEDLEMSTYPER.map((mt) => (
+              <SelectItem key={mt} value={mt} data-testid={`filter-${mt.replace(/[^a-z0-9]/gi, '-').toLowerCase()}`}>
+                {mt}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="mt-6 border border-border rounded-md bg-white overflow-hidden">

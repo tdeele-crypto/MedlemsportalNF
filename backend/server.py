@@ -151,18 +151,21 @@ async def delete_user(user_id: str, admin: dict = Depends(require_admin)):
 @api.get("/members")
 async def list_members(
     q: str = Query("", description="Wildcard search across medlemsnummer, navn, adresse, telefon, email"),
+    medlemstype: str = Query("", description="Filter by exact medlemstype, e.g. 'Alm. medlemskab'"),
     limit: int = Query(50, ge=1, le=200),
     skip: int = Query(0, ge=0),
     _user: dict = Depends(get_current_user),
 ):
-    filt = {}
+    filt: dict = {}
     if q.strip():
         pattern = re.escape(q.strip())
         regex = {"$regex": pattern, "$options": "i"}
-        filt = {"$or": [
+        filt["$or"] = [
             {"medlemsnummer": regex}, {"navn": regex}, {"adresse": regex},
             {"telefon": regex}, {"email": regex},
-        ]}
+        ]
+    if medlemstype.strip():
+        filt["medlemstype"] = medlemstype.strip()
     total = await db.members.count_documents(filt)
     cursor = db.members.find(filt).sort("navn", 1).skip(skip).limit(limit)
     items = [member_to_out(d) async for d in cursor]
