@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 const empty = { email: "", password: "", name: "", role: "user" };
@@ -27,6 +27,8 @@ export default function UsersPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(empty);
   const [saving, setSaving] = useState(false);
+  const [editUser, setEditUser] = useState(null);
+  const [editForm, setEditForm] = useState({ name: "", role: "user", password: "" });
 
   const load = async () => {
     try {
@@ -60,6 +62,26 @@ export default function UsersPage() {
       await api.delete(`/users/${uid}`);
       await load();
       toast.success("Bruger slettet");
+    } catch (err) {
+      toast.error(formatApiError(err));
+    }
+  };
+
+  const openEdit = (u) => {
+    setEditUser(u);
+    setEditForm({ name: u.name || "", role: u.role || "user", password: "" });
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!editUser) return;
+    const payload = { name: editForm.name, role: editForm.role };
+    if (editForm.password) payload.password = editForm.password;
+    try {
+      await api.patch(`/users/${editUser.id}`, payload);
+      setEditUser(null);
+      await load();
+      toast.success("Bruger opdateret");
     } catch (err) {
       toast.error(formatApiError(err));
     }
@@ -161,7 +183,7 @@ export default function UsersPage() {
               <TableHead>Navn</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Rolle</TableHead>
-              <TableHead className="w-16"></TableHead>
+              <TableHead className="w-24"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -183,7 +205,17 @@ export default function UsersPage() {
                   )}
                 </TableCell>
                 <TableCell>
-                  {u.id !== user?.id && (
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => openEdit(u)}
+                      title="Rediger bruger"
+                      data-testid={`edit-user-${u.id}`}
+                    >
+                      <Pencil className="w-4 h-4" strokeWidth={1.6} />
+                    </Button>
+                    {u.id !== user?.id && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
@@ -215,12 +247,75 @@ export default function UsersPage() {
                       </AlertDialogContent>
                     </AlertDialog>
                   )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+
+      <Dialog open={!!editUser} onOpenChange={(o) => !o && setEditUser(null)}>
+        <DialogContent className="bg-white" data-testid="edit-user-dialog">
+          <DialogHeader>
+            <DialogTitle>Rediger {editUser?.email}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSaveEdit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-user-name">Navn</Label>
+              <Input
+                id="edit-user-name"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                data-testid="edit-user-name-input"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-user-password">Ny adgangskode (lad stå tom for at beholde)</Label>
+              <Input
+                id="edit-user-password"
+                type="text"
+                placeholder="••••••••"
+                value={editForm.password}
+                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                data-testid="edit-user-password-input"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Rolle</Label>
+              <Select
+                value={editForm.role}
+                onValueChange={(v) => setEditForm({ ...editForm, role: v })}
+                disabled={editUser?.id === user?.id}
+              >
+                <SelectTrigger data-testid="edit-user-role-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-white">
+                  <SelectItem value="user" data-testid="edit-role-user">Bruger (læse)</SelectItem>
+                  <SelectItem value="editor" data-testid="edit-role-editor">Editor (deltager-håndtering)</SelectItem>
+                  <SelectItem value="admin" data-testid="edit-role-admin">Administrator (fuld adgang)</SelectItem>
+                </SelectContent>
+              </Select>
+              {editUser?.id === user?.id && (
+                <p className="text-xs text-muted-foreground">Du kan ikke ændre din egen rolle.</p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setEditUser(null)} data-testid="edit-user-cancel">
+                Annullér
+              </Button>
+              <Button
+                type="submit"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                data-testid="edit-user-save"
+              >
+                Gem ændringer
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

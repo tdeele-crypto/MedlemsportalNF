@@ -127,12 +127,15 @@ async def create_user(payload: UserCreateIn, _admin: dict = Depends(require_admi
 
 
 @api.patch("/users/{user_id}", response_model=UserOut)
-async def update_user(user_id: str, payload: UserUpdateIn, _admin: dict = Depends(require_admin)):
+async def update_user(user_id: str, payload: UserUpdateIn, admin: dict = Depends(require_admin)):
     update = {}
     if payload.name is not None:
         update["name"] = payload.name
     if payload.role is not None:
-        update["role"] = _normalize_role(payload.role)
+        new_role = _normalize_role(payload.role)
+        if admin["id"] == user_id and new_role != "admin":
+            raise HTTPException(status_code=400, detail="Du kan ikke fjerne din egen admin-rolle")
+        update["role"] = new_role
     if payload.password:
         update["password_hash"] = hash_password(payload.password)
     if not update:
