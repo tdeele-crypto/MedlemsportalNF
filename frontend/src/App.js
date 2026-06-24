@@ -12,7 +12,7 @@ import EventDetailPage from "@/pages/EventDetailPage";
 import QuickCheckInPage from "@/pages/QuickCheckInPage";
 import UsersPage from "@/pages/UsersPage";
 
-function ProtectedRoute({ children, adminOnly = false }) {
+function ProtectedRoute({ children, adminOnly = false, allowEditor = false }) {
   const { user, loading } = useAuth();
   if (loading) {
     return (
@@ -22,7 +22,11 @@ function ProtectedRoute({ children, adminOnly = false }) {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
-  if (adminOnly && user.role !== "admin") return <Navigate to="/medlemmer" replace />;
+  if (adminOnly) {
+    const isAdmin = user.role === "admin";
+    const isEditor = allowEditor && user.role === "editor";
+    if (!isAdmin && !isEditor) return <Navigate to="/arrangementer" replace />;
+  }
   return children;
 }
 
@@ -35,7 +39,7 @@ function App() {
           <Route
             path="/arrangementer/:id/check-in"
             element={
-              <ProtectedRoute adminOnly>
+              <ProtectedRoute adminOnly allowEditor>
                 <QuickCheckInPage />
               </ProtectedRoute>
             }

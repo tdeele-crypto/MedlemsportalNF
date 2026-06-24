@@ -131,6 +131,7 @@ export default function UsersPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="user" data-testid="role-user">Bruger (læse)</SelectItem>
+                    <SelectItem value="editor" data-testid="role-editor">Editor (deltager-håndtering)</SelectItem>
                     <SelectItem value="admin" data-testid="role-admin">Administrator (fuld adgang)</SelectItem>
                   </SelectContent>
                 </Select>
@@ -172,6 +173,10 @@ export default function UsersPage() {
                   {u.role === "admin" ? (
                     <Badge className="bg-primary/10 text-primary hover:bg-primary/10 border-primary/20">
                       Administrator
+                    </Badge>
+                  ) : u.role === "editor" ? (
+                    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200">
+                      Editor
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="font-normal">Bruger</Badge>

@@ -82,6 +82,14 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     return user
 
 
+async def require_admin_or_editor(user: dict = Depends(get_current_user)) -> dict:
+    """Allow both admins and editors. Editors can manage participants
+    but cannot create/edit/delete events or view the member list."""
+    if user.get("role") not in ("admin", "editor"):
+        raise HTTPException(status_code=403, detail="Du har ikke rettigheder til denne handling")
+    return user
+
+
 # ----- Brute-force lockout -----
 async def check_lockout(identifier: str):
     db = _get_db()

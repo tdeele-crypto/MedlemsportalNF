@@ -21,6 +21,7 @@ export default function EventDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const canEdit = isAdmin || user?.role === "editor";
 
   const [event, setEvent] = useState(null);
   const [participants, setParticipants] = useState([]);
@@ -116,7 +117,7 @@ export default function EventDetailPage() {
       <div className="mt-10 flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-xl font-semibold tracking-tight">Deltagere</h2>
         <div className="flex items-center gap-2">
-          {participants.length > 0 && isAdmin && (
+          {participants.length > 0 && canEdit && (
             <Link to={`/arrangementer/${id}/check-in`} data-testid="quick-checkin-link">
               <Button variant="outline">
                 <ScanLine className="w-4 h-4 mr-2" strokeWidth={1.6} />
@@ -141,7 +142,7 @@ export default function EventDetailPage() {
               Del på Facebook
             </Button>
           )}
-          {isAdmin && (
+          {canEdit && (
             <Button
               onClick={() => setAddOpen(true)}
               className="bg-primary hover:bg-primary/90 text-primary-foreground"
@@ -156,7 +157,7 @@ export default function EventDetailPage() {
 
       <ParticipantsTable
         participants={participants}
-        isAdmin={isAdmin}
+        isAdmin={canEdit}
         onTogglePaid={handleTogglePaid}
         onToggleCheckedIn={handleToggleCheckedIn}
         onEdit={setEditP}

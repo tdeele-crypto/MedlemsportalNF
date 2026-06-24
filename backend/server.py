@@ -35,7 +35,7 @@ from core.schemas import (
 )
 from core.security import (
     hash_password, verify_password, create_access_token, decode_access_token,
-    get_current_user, require_admin,
+    get_current_user, require_admin, require_admin_or_editor,
     check_lockout, record_failed_login, clear_failed_login,
     JWT_ALGO, JWT_SECRET,
 )
@@ -103,6 +103,13 @@ async def list_users(_admin: dict = Depends(require_admin)):
     ]
 
 
+VALID_ROLES = {"admin", "editor", "user"}
+
+
+def _normalize_role(role: str | None) -> str:
+    return role if role in VALID_ROLES else "user"
+
+
 @api.post("/users", response_model=UserOut)
 async def create_user(payload: UserCreateIn, _admin: dict = Depends(require_admin)):
     email = payload.email.lower().strip()
@@ -111,7 +118,7 @@ async def create_user(payload: UserCreateIn, _admin: dict = Depends(require_admi
     doc = {
         "email": email,
         "name": payload.name or "",
-        "role": "admin" if payload.role == "admin" else "user",
+        "role": _normalize_role(payload.role),
         "password_hash": hash_password(payload.password),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -125,7 +132,7 @@ async def update_user(user_id: str, payload: UserUpdateIn, _admin: dict = Depend
     if payload.name is not None:
         update["name"] = payload.name
     if payload.role is not None:
-        update["role"] = "admin" if payload.role == "admin" else "user"
+        update["role"] = _normalize_role(payload.role)
     if payload.password:
         update["password_hash"] = hash_password(payload.password)
     if not update:
@@ -154,7 +161,7 @@ async def list_members(
     medlemstype: str = Query("", description="Filter by exact medlemstype, e.g. 'Alm. medlemskab'"),
     limit: int = Query(50, ge=1, le=200),
     skip: int = Query(0, ge=0),
-    _admin: dict = Depends(require_admin),
+    _admin: dict = Depends(require_admin_or_editor),
 ):
     filt: dict = {}
     if q.strip():
@@ -363,7 +370,7 @@ async def list_participants(event_id: str, _user: dict = Depends(get_current_use
 @api.post("/events/{event_id}/participants", response_model=ParticipantOut)
 async def add_participant(
     event_id: str, payload: AddParticipantIn, background: BackgroundTasks,
-    _admin: dict = Depends(require_admin),
+    _admin: dict = Depends(require_admin_or_editor),
 ):
     if not ObjectId.is_valid(event_id):
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
@@ -425,7 +432,7 @@ def _build_participant_update(payload: UpdateParticipantIn) -> dict:
 @api.patch("/events/{event_id}/participants/{participant_id}", response_model=ParticipantOut)
 async def update_participant(
     event_id: str, participant_id: str, payload: UpdateParticipantIn,
-    background: BackgroundTasks, _admin: dict = Depends(require_admin),
+    background: BackgroundTasks, _admin: dict = Depends(require_admin_or_editor),
 ):
     if not (ObjectId.is_valid(event_id) and ObjectId.is_valid(participant_id)):
         raise HTTPException(status_code=404, detail="Tilmelding ikke fundet")
@@ -451,7 +458,7 @@ async def update_participant(
 
 
 @api.delete("/events/{event_id}/participants/{participant_id}")
-async def remove_participant(event_id: str, participant_id: str, _admin: dict = Depends(require_admin)):
+async def remove_participant(event_id: str, participant_id: str, _admin: dict = Depends(require_admin_or_editor)):
     if not (ObjectId.is_valid(event_id) and ObjectId.is_valid(participant_id)):
         raise HTTPException(status_code=404, detail="Tilmelding ikke fundet")
     res = await db.participants.delete_one({"_id": ObjectId(participant_id), "event_id": event_id})
