@@ -125,7 +125,7 @@ export default function EventDetailPage() {
               </Button>
             </Link>
           )}
-          {participants.length > 0 && (
+          {participants.length > 0 && canEdit && (
             <Button variant="outline" onClick={handleExportCsv} data-testid="export-csv-button">
               <Download className="w-4 h-4 mr-2" strokeWidth={1.6} />
               Eksportér CSV

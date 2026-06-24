@@ -468,7 +468,7 @@ async def remove_participant(event_id: str, participant_id: str, _admin: dict = 
 
 
 @api.get("/events/{event_id}/participants/export")
-async def export_participants_csv(event_id: str, _user: dict = Depends(get_current_user)):
+async def export_participants_csv(event_id: str, _admin: dict = Depends(require_admin_or_editor)):
     """CSV export with check-in column for printing."""
     if not ObjectId.is_valid(event_id):
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
