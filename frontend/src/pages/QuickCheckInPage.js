@@ -10,7 +10,7 @@ import { toast } from "sonner";
 export default function QuickCheckInPage() {
   const { id } = useParams();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const canEdit = user?.role === "admin" || user?.role === "editor";
   const [event, setEvent] = useState(null);
   const [participants, setParticipants] = useState([]);
   const [q, setQ] = useState("");
@@ -41,7 +41,7 @@ export default function QuickCheckInPage() {
     );
   }, [participants, q]);
 
-  if (!isAdmin) return <Navigate to={`/arrangementer/${id}`} replace />;
+  if (!canEdit) return <Navigate to={`/arrangementer/${id}`} replace />;
 
   const toggle = async (p) => {
     setBusy((b) => ({ ...b, [p.id]: true }));
