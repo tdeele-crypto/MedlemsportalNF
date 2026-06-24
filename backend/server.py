@@ -154,7 +154,7 @@ async def list_members(
     medlemstype: str = Query("", description="Filter by exact medlemstype, e.g. 'Alm. medlemskab'"),
     limit: int = Query(50, ge=1, le=200),
     skip: int = Query(0, ge=0),
-    _user: dict = Depends(get_current_user),
+    _admin: dict = Depends(require_admin),
 ):
     filt: dict = {}
     if q.strip():
@@ -173,7 +173,7 @@ async def list_members(
 
 
 @api.get("/members/{member_id}", response_model=MemberOut)
-async def get_member(member_id: str, _user: dict = Depends(get_current_user)):
+async def get_member(member_id: str, _admin: dict = Depends(require_admin)):
     if not ObjectId.is_valid(member_id):
         raise HTTPException(status_code=404, detail="Medlem ikke fundet")
     doc = await db.members.find_one({"_id": ObjectId(member_id)})
@@ -183,7 +183,7 @@ async def get_member(member_id: str, _user: dict = Depends(get_current_user)):
 
 
 @api.get("/members/{member_id}/registrations", response_model=List[MemberRegistrationOut])
-async def get_member_registrations(member_id: str, _user: dict = Depends(get_current_user)):
+async def get_member_registrations(member_id: str, _admin: dict = Depends(require_admin)):
     """Return all event registrations for a single member (history)."""
     if not ObjectId.is_valid(member_id):
         raise HTTPException(status_code=404, detail="Medlem ikke fundet")

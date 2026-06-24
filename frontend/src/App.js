@@ -56,8 +56,22 @@ function App() {
                 </ProtectedRoute>
               }
             />
-            <Route path="medlemmer" element={<MembersPage />} />
-            <Route path="medlemmer/:id" element={<MemberDetailPage />} />
+            <Route
+              path="medlemmer"
+              element={
+                <ProtectedRoute adminOnly>
+                  <MembersPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="medlemmer/:id"
+              element={
+                <ProtectedRoute adminOnly>
+                  <MemberDetailPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="arrangementer" element={<EventsPage />} />
             <Route path="arrangementer/:id" element={<EventDetailPage />} />
             <Route

@@ -14,7 +14,7 @@ const LOGO_URL = "https://customer-assets.emergentagent.com/job_member-events-3/
 
 const navItems = [
   { to: "/", label: "Oversigt", icon: LayoutDashboard, end: true, key: "dashboard", adminOnly: true },
-  { to: "/medlemmer", label: "Medlemmer", icon: Users, key: "members" },
+  { to: "/medlemmer", label: "Medlemmer", icon: Users, key: "members", adminOnly: true },
   { to: "/arrangementer", label: "Arrangementer", icon: Calendar, key: "events" },
 ];
 
