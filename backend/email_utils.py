@@ -101,11 +101,14 @@ async def _send(to_email: str, to_name: str, subject: str, body_text: str, body_
             except Exception as e:
                 logger.warning("Inline image attach failed: %s", e)
     try:
+        # Port 465 = direct SSL/TLS, port 587 = STARTTLS
+        use_ssl = SMTP_PORT == 465
         await aiosmtplib.send(
             msg,
             hostname=SMTP_SERVER,
             port=SMTP_PORT,
-            start_tls=True,
+            use_tls=use_ssl,
+            start_tls=not use_ssl,
             username=SMTP_LOGIN,
             password=SMTP_PASSWORD,
             timeout=20,
