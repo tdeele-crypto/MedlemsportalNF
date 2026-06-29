@@ -688,6 +688,49 @@ async def facebook_config(_user: dict = Depends(get_current_user)):
     return {"group_url": os.environ.get("FACEBOOK_GROUP_URL", "")}
 
 
+# ----- Public read-only events landing page (no auth, secret token) -----
+def _public_event_minimal(ev: dict, request: Request) -> dict:
+    """Strip an event doc down to fields safe for public display.
+    Excludes participant counts, contact_member_id, internal flags."""
+    base = _resolve_public_base_url(request)
+    image_url = (
+        f"{base}/api/share/event/{ev['_id']}/image" if ev.get("image_path") else None
+    )
+    return {
+        "id": str(ev["_id"]),
+        "title": ev.get("title", ""),
+        "description": ev.get("description", ""),
+        "location": ev.get("location", ""),
+        "address": ev.get("address", ""),
+        "event_date": ev.get("event_date"),
+        "event_time": ev.get("event_time"),
+        "registration_deadline": ev.get("registration_deadline"),
+        "price_member": float(ev.get("price_member", 0) or 0),
+        "price_non_member": float(ev.get("price_non_member", 0) or 0),
+        "contact_name": ev.get("contact_name", ""),
+        "contact_email": ev.get("contact_email", ""),
+        "contact_phone": ev.get("contact_phone", ""),
+        "image_url": image_url,
+    }
+
+
+@api.get("/public/events/{token}")
+async def public_events(token: str, request: Request):
+    """Public read-only list of UPCOMING events. Cryptic-token gated."""
+    expected = os.environ.get("PUBLIC_EVENTS_TOKEN", "").strip()
+    if not expected or token != expected:
+        raise HTTPException(status_code=404, detail="Ikke fundet")
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    items: list[dict] = []
+    async for ev in db.events.find({}):
+        d = ev.get("event_date") or ""
+        if d and d < today_iso:
+            continue  # skip past events
+        items.append(_public_event_minimal(ev, request))
+    items.sort(key=lambda e: e.get("event_date") or "9999")
+    return items
+
+
 # ----- Image upload (event covers) -----
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB

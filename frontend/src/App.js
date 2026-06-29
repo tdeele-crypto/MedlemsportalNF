@@ -11,6 +11,7 @@ import EventsPage from "@/pages/EventsPage";
 import EventDetailPage from "@/pages/EventDetailPage";
 import QuickCheckInPage from "@/pages/QuickCheckInPage";
 import UsersPage from "@/pages/UsersPage";
+import PublicEventsPage from "@/pages/PublicEventsPage";
 
 function ProtectedRoute({ children, adminOnly = false, allowEditor = false }) {
   const { user, loading } = useAuth();
@@ -36,6 +37,7 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/p/:token" element={<PublicEventsPage />} />
           <Route
             path="/arrangementer/:id/check-in"
             element={
