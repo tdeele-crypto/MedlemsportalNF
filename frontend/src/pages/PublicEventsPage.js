@@ -194,6 +194,12 @@ function PublicEventCard({ ev }) {
           )}
           <dt className="font-medium text-muted-foreground">Pris:</dt>
           <dd className="text-foreground">{fmtPrice(ev.price_member, ev.price_non_member)}</dd>
+          {ev.max_participants && (
+            <>
+              <dt className="font-medium text-muted-foreground">Max antal deltagere:</dt>
+              <dd className="text-foreground">{ev.max_participants}</dd>
+            </>
+          )}
         </dl>
 
         {ev.description && (

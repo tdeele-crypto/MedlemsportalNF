@@ -707,6 +707,7 @@ def _public_event_minimal(ev: dict, request: Request) -> dict:
         "registration_deadline": ev.get("registration_deadline"),
         "price_member": float(ev.get("price_member", 0) or 0),
         "price_non_member": float(ev.get("price_non_member", 0) or 0),
+        "max_participants": int(ev["max_participants"]) if ev.get("max_participants") else None,
         "contact_name": ev.get("contact_name", ""),
         "contact_email": ev.get("contact_email", ""),
         "contact_phone": ev.get("contact_phone", ""),
