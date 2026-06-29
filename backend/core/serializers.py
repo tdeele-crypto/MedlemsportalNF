@@ -24,6 +24,10 @@ def event_to_out(
     paid_revenue: float = 0.0,
     checked_in_attendees: int = 0,
 ) -> dict:
+    max_p = doc.get("max_participants")
+    max_p = int(max_p) if isinstance(max_p, (int, float)) and max_p else None
+    total_att = total_members + total_non_members
+    free_spots = max(0, max_p - total_att) if max_p is not None else None
     return {
         "id": str(doc["_id"]),
         "title": doc.get("title", ""),
@@ -40,6 +44,8 @@ def event_to_out(
         "created_at": doc.get("created_at", ""),
         "price_member": float(doc.get("price_member", 0) or 0),
         "price_non_member": float(doc.get("price_non_member", 0) or 0),
+        "max_participants": max_p,
+        "free_spots": free_spots,
         "email_on_register": bool(doc.get("email_on_register", True)),
         "email_on_paid": bool(doc.get("email_on_paid", True)),
         "email_on_reminder": bool(doc.get("email_on_reminder", True)),
@@ -47,7 +53,7 @@ def event_to_out(
         "participant_count": count,
         "total_members": total_members,
         "total_non_members": total_non_members,
-        "total_attendees": total_members + total_non_members,
+        "total_attendees": total_att,
         "checked_in_attendees": checked_in_attendees,
         "expected_revenue": round(expected_revenue, 2),
         "paid_revenue": round(paid_revenue, 2),

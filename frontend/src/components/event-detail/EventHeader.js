@@ -101,7 +101,21 @@ export default function EventHeader({ event, isAdmin, participantsCount, onEdit 
           <div className="text-4xl font-bold text-primary" data-testid="participant-count">
             {event.total_attendees ?? 0}
           </div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider">deltagere i alt</div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider">
+            {event.max_participants ? `af ${event.max_participants} deltagere` : "deltagere i alt"}
+          </div>
+          {event.max_participants != null && (
+            <div
+              className={`mt-1 text-xs font-medium ${
+                event.free_spots === 0 ? "text-destructive"
+                : event.free_spots <= 5 ? "text-amber-600"
+                : "text-primary"
+              }`}
+              data-testid="free-spots"
+            >
+              {event.free_spots === 0 ? "Arrangementet er fuldt" : `${event.free_spots} ledige pladser`}
+            </div>
+          )}
           <div className="mt-2 text-xs text-muted-foreground">
             <span data-testid="total-members">{event.total_members ?? 0}</span> medlem{(event.total_members ?? 0) === 1 ? "" : "mer"}
             {" · "}

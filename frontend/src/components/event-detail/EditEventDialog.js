@@ -16,7 +16,7 @@ import { toast } from "sonner";
 const emptyForm = {
   title: "", description: "", location: "", address: "",
   event_date: "", event_time: "", registration_deadline: "",
-  price_member: "", price_non_member: "",
+  price_member: "", price_non_member: "", max_participants: "",
   email_on_register: true, email_on_paid: true, email_on_reminder: true,
   image_path: null, contact_member: null,
 };
@@ -31,6 +31,7 @@ const formFromEvent = (event) => ({
   registration_deadline: event.registration_deadline || "",
   price_member: event.price_member ?? "",
   price_non_member: event.price_non_member ?? "",
+  max_participants: event.max_participants ?? "",
   email_on_register: event.email_on_register !== false,
   email_on_paid: event.email_on_paid !== false,
   email_on_reminder: event.email_on_reminder !== false,
@@ -60,6 +61,7 @@ export default function EditEventDialog({ open, onOpenChange, event, onSaved }) 
         contact_member_id: form.contact_member?.id || null,
         price_member: Number(form.price_member) || 0,
         price_non_member: Number(form.price_non_member) || 0,
+        max_participants: form.max_participants ? Number(form.max_participants) : null,
       });
       onOpenChange(false);
       toast.success("Arrangement opdateret");
@@ -166,6 +168,17 @@ export default function EditEventDialog({ open, onOpenChange, event, onSaved }) 
                 data-testid="edit-event-price-non-member-input"
               />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ev-max">Max antal deltagere (valgfri)</Label>
+            <Input
+              id="ev-max" type="number" min="1"
+              placeholder="Ingen begrænsning"
+              value={form.max_participants}
+              onChange={(e) => set({ max_participants: e.target.value })}
+              data-testid="edit-event-max-participants-input"
+            />
+            <p className="text-xs text-muted-foreground">Lad stå tom for ingen øvre grænse.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="ev-desc">Beskrivelse</Label>

@@ -27,7 +27,7 @@ export default function EventsPage() {
   const isAdmin = user?.role === "admin";
   const [events, setEvents] = useState([]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", location: "", address: "", event_date: "", event_time: "", registration_deadline: "", price_member: "", price_non_member: "", email_on_register: true, email_on_paid: true, email_on_reminder: true, image_path: null, contact_member: null });
+  const [form, setForm] = useState({ title: "", description: "", location: "", address: "", event_date: "", event_time: "", registration_deadline: "", price_member: "", price_non_member: "", max_participants: "", email_on_register: true, email_on_paid: true, email_on_reminder: true, image_path: null, contact_member: null });
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -52,9 +52,10 @@ export default function EventsPage() {
         contact_member_id: form.contact_member?.id || null,
         price_member: Number(form.price_member) || 0,
         price_non_member: Number(form.price_non_member) || 0,
+        max_participants: form.max_participants ? Number(form.max_participants) : null,
       });
       setOpen(false);
-      setForm({ title: "", description: "", location: "", address: "", event_date: "", event_time: "", registration_deadline: "", price_member: "", price_non_member: "", email_on_register: true, email_on_paid: true, email_on_reminder: true, image_path: null, contact_member: null });
+      setForm({ title: "", description: "", location: "", address: "", event_date: "", event_time: "", registration_deadline: "", price_member: "", price_non_member: "", max_participants: "", email_on_register: true, email_on_paid: true, email_on_reminder: true, image_path: null, contact_member: null });
       await load();
       toast.success("Arrangement oprettet");
     } catch (err) {
@@ -194,6 +195,19 @@ export default function EventsPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="max_participants">Max antal deltagere (valgfri)</Label>
+                  <Input
+                    id="max_participants"
+                    type="number"
+                    min="1"
+                    placeholder="Ingen begrænsning"
+                    value={form.max_participants}
+                    onChange={(e) => setForm({ ...form, max_participants: e.target.value })}
+                    data-testid="event-max-participants-input"
+                  />
+                  <p className="text-xs text-muted-foreground">Lad stå tom for ingen øvre grænse.</p>
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="description">Beskrivelse</Label>
                   <Textarea
                     id="description"
@@ -314,10 +328,26 @@ export default function EventsPage() {
               </div>
               <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" strokeWidth={1.6} />
             </div>
-            <div className="mt-4 pt-4 border-t border-border flex items-baseline justify-between">
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold text-primary">{ev.total_attendees ?? ev.participant_count}</span>
-                <span className="text-xs text-muted-foreground">deltagere</span>
+            <div className="mt-4 pt-4 border-t border-border flex items-baseline justify-between gap-3 flex-wrap">
+              <div className="flex items-baseline gap-4 text-sm">
+                <Stat
+                  value={ev.total_attendees ?? ev.participant_count}
+                  label="Tilmeldte"
+                  testId={`stat-attendees-${ev.id}`}
+                />
+                <Stat
+                  value={ev.max_participants ?? "—"}
+                  label="Max"
+                  testId={`stat-max-${ev.id}`}
+                  muted={ev.max_participants == null}
+                />
+                <Stat
+                  value={ev.free_spots ?? "∞"}
+                  label="Ledige"
+                  testId={`stat-free-${ev.id}`}
+                  highlight={ev.free_spots === 0 ? "danger" : ev.free_spots != null && ev.free_spots <= 5 ? "warn" : null}
+                  muted={ev.free_spots == null}
+                />
               </div>
               {(ev.price_member > 0 || ev.price_non_member > 0) && (
                 <div className="text-xs text-muted-foreground text-right">
@@ -330,6 +360,21 @@ export default function EventsPage() {
           </Link>
         ))}
       </div>
+    </div>
+  );
+}
+
+function Stat({ value, label, testId, highlight, muted }) {
+  const valueColor =
+    highlight === "danger" ? "text-destructive" :
+    highlight === "warn" ? "text-amber-600" :
+    muted ? "text-muted-foreground" : "text-primary";
+  return (
+    <div className="flex flex-col leading-tight">
+      <span className={`text-xl font-bold ${valueColor}`} data-testid={testId}>
+        {value}
+      </span>
+      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
     </div>
   );
 }

@@ -50,6 +50,7 @@ class EventIn(BaseModel):
     contact_member_id: Optional[str] = None
     price_member: float = 0
     price_non_member: float = 0
+    max_participants: Optional[int] = None
     email_on_register: bool = True
     email_on_paid: bool = True
     email_on_reminder: bool = True
@@ -76,6 +77,8 @@ class EventOut(BaseModel):
     image_path: Optional[str] = None
     price_member: float = 0
     price_non_member: float = 0
+    max_participants: Optional[int] = None
+    free_spots: Optional[int] = None
     participant_count: int = 0
     total_attendees: int = 0
     total_members: int = 0

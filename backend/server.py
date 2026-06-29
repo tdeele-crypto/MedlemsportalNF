@@ -299,6 +299,8 @@ async def list_events(_user: dict = Depends(get_current_user)):
 
 
 def _event_doc_from_payload(payload: EventIn, contact: dict) -> dict:
+    raw_max = payload.max_participants
+    max_p = int(raw_max) if raw_max and int(raw_max) > 0 else None
     return {
         "title": payload.title,
         "description": payload.description or "",
@@ -309,6 +311,7 @@ def _event_doc_from_payload(payload: EventIn, contact: dict) -> dict:
         "registration_deadline": payload.registration_deadline,
         "price_member": float(payload.price_member or 0),
         "price_non_member": float(payload.price_non_member or 0),
+        "max_participants": max_p,
         "email_on_register": bool(payload.email_on_register),
         "email_on_paid": bool(payload.email_on_paid),
         "email_on_reminder": bool(payload.email_on_reminder),
@@ -389,6 +392,16 @@ async def add_participant(
     num_nm = max(0, int(payload.num_non_members or 0))
     if num_m + num_nm < 1:
         num_m = 1
+    # Enforce max_participants if set
+    max_p = ev.get("max_participants")
+    if isinstance(max_p, (int, float)) and max_p:
+        _, members, non_members, _, _, _ = await aggregate_event_totals(db, event_id)
+        if members + non_members + num_m + num_nm > int(max_p):
+            free = max(0, int(max_p) - (members + non_members))
+            raise HTTPException(
+                status_code=400,
+                detail=f"Arrangementet er fuldt. Der er kun {free} ledig{'e' if free != 1 else ''} plads{'er' if free != 1 else ''} tilbage.",
+            )
     doc = {
         "event_id": event_id,
         "member_id": str(member["_id"]),
@@ -445,6 +458,23 @@ async def update_participant(
     if not existing:
         raise HTTPException(status_code=404, detail="Tilmelding ikke fundet")
     update = _build_participant_update(payload)
+    # If raising counts, check max_participants
+    if update and ("num_members" in update or "num_non_members" in update):
+        ev = await db.events.find_one({"_id": ObjectId(event_id)})
+        max_p = (ev or {}).get("max_participants")
+        if isinstance(max_p, (int, float)) and max_p:
+            _, members, non_members, _, _, _ = await aggregate_event_totals(db, event_id)
+            old_m = int(existing.get("num_members", 1) or 0)
+            old_nm = int(existing.get("num_non_members", 0) or 0)
+            new_m = int(update.get("num_members", old_m))
+            new_nm = int(update.get("num_non_members", old_nm))
+            delta = (new_m + new_nm) - (old_m + old_nm)
+            if delta > 0 and members + non_members + delta > int(max_p):
+                free = max(0, int(max_p) - (members + non_members))
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Kan ikke øge antallet — kun {free} ledig{'e' if free != 1 else ''} plads{'er' if free != 1 else ''} tilbage.",
+                )
     if update:
         await db.participants.update_one(
             {"_id": ObjectId(participant_id), "event_id": event_id},
