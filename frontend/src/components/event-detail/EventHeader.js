@@ -120,6 +120,12 @@ export default function EventHeader({ event, isAdmin, participantsCount, onEdit 
             <span data-testid="total-members">{event.total_members ?? 0}</span> medlem{(event.total_members ?? 0) === 1 ? "" : "mer"}
             {" · "}
             <span data-testid="total-non-members">{event.total_non_members ?? 0}</span> ikke-medl.
+            {(event.total_free ?? 0) > 0 && (
+              <>
+                {" · "}
+                <span data-testid="total-free">{event.total_free}</span> gratis
+              </>
+            )}
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
             {participantsCount} tilmelding{participantsCount === 1 ? "" : "er"}

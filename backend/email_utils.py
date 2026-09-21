@@ -160,25 +160,33 @@ def _html_wrap(title: str, body_html: str) -> str:
 </body></html>"""
 
 
-async def send_registration_email(member: dict, event: dict, num_members: int, num_non_members: int, note: str, price_member: float, price_non_member: float) -> bool:
+async def send_registration_email(member: dict, event: dict, num_members: int, num_non_members: int, note: str, price_member: float, price_non_member: float, num_free: int = 0) -> bool:
     to_email = (member.get("email") or "").strip()
     if not to_email:
         return False
-    total = num_members + num_non_members
+    total = num_members + num_non_members + num_free
     title = event.get("title", "Arrangement")
     summary = _event_summary(event)
     summary_html = _event_summary_html(event)
-    expected = num_members * (price_member or 0) + num_non_members * (price_non_member or 0)
+    # Free discount applies to members first, then non-members
+    free_on_m = min(num_free, num_members)
+    pay_m = num_members - free_on_m
+    pay_nm = num_non_members - min(num_free - free_on_m, num_non_members)
+    expected = pay_m * (price_member or 0) + pay_nm * (price_non_member or 0)
     price_line = ""
     if expected > 0:
         price_line = f"\nForventet betaling: {expected:g} kr."
+
+    breakdown = f"{num_members} medlemmer + {num_non_members} ikke-medlemmer"
+    if num_free > 0:
+        breakdown += f" + {num_free} gratis"
 
     text = (
         f"Hej {member.get('navn', '')}\n\n"
         f"Du er nu tilmeldt arrangementet: {title}.\n\n"
         f"{summary}\n\n"
         + (f"{event.get('description', '')}\n\n" if event.get("description") else "")
-        + f"Antal: {total} ({num_members} medlemmer + {num_non_members} ikke-medlemmer)"
+        + f"Antal: {total} ({breakdown})"
         f"{price_line}"
         f"{(chr(10) + chr(10) + 'Note: ' + note) if note else ''}\n\n"
         f"Vi glæder os til at se dig.\n\nVenlig hilsen\n{FROM_NAME}"
@@ -194,7 +202,7 @@ async def send_registration_email(member: dict, event: dict, num_members: int, n
         <div style="color:#5C615C; font-size:14px; margin-top:6px;">{summary_html}</div>
       </div>
       {f'<p style="margin:0 0 16px; color:#1B1F1B; white-space:pre-line;">{event.get("description", "")}</p>' if event.get("description") else ''}
-      <p style="margin:0 0 8px;"><strong>Antal:</strong> {total} ({num_members} medlemmer + {num_non_members} ikke-medlemmer)</p>
+      <p style="margin:0 0 8px;"><strong>Antal:</strong> {total} ({breakdown})</p>
       {f'<p style="margin:0 0 8px;"><strong>Forventet betaling:</strong> {expected:g} kr.</p>' if expected > 0 else ''}
       {f'<p style="margin:0 0 8px;"><strong>Note:</strong> {note}</p>' if note else ''}
       <p style="margin:24px 0 0;">Vi glæder os til at se dig.</p>

@@ -76,7 +76,8 @@ export default function ParticipantsTable({
 
 // ---- Mobile card ----
 function ParticipantCard({ p, isAdmin, onTogglePaid, onToggleCheckedIn, onEdit, onRemove }) {
-  const total = (p.num_members || 0) + (p.num_non_members || 0);
+  const nf = p.num_free || 0;
+  const total = (p.num_members || 0) + (p.num_non_members || 0) + nf;
   const addressExtra = p.adresse ? p.adresse.split("\n").slice(1).join(", ") : "";
   return (
     <div
@@ -112,7 +113,7 @@ function ParticipantCard({ p, isAdmin, onTogglePaid, onToggleCheckedIn, onEdit, 
         >
           <div className="text-2xl font-bold text-primary leading-none">{total}</div>
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">
-            {p.num_members || 0} m · {p.num_non_members || 0} im
+            {p.num_members || 0} m · {p.num_non_members || 0} im{nf > 0 ? ` · ${nf} gratis` : ""}
           </div>
         </div>
       </div>
@@ -199,7 +200,8 @@ function ParticipantCard({ p, isAdmin, onTogglePaid, onToggleCheckedIn, onEdit, 
 
 // ---- Desktop row (unchanged) ----
 function ParticipantRow({ p, isAdmin, onTogglePaid, onToggleCheckedIn, onEdit, onRemove }) {
-  const total = (p.num_members || 0) + (p.num_non_members || 0);
+  const nf = p.num_free || 0;
+  const total = (p.num_members || 0) + (p.num_non_members || 0) + nf;
   return (
     <TableRow data-testid={`participant-row-desktop-${p.id}`} className={p.paid ? "bg-primary/5" : ""}>
       <TableCell className="font-mono text-xs align-top">{p.medlemsnummer}</TableCell>
@@ -225,7 +227,7 @@ function ParticipantRow({ p, isAdmin, onTogglePaid, onToggleCheckedIn, onEdit, o
       <TableCell className="align-top text-sm">
         <div className="font-semibold">{total}</div>
         <div className="text-xs text-muted-foreground">
-          {p.num_members || 0} medl. · {p.num_non_members || 0} ikke-m.
+          {p.num_members || 0} medl. · {p.num_non_members || 0} ikke-m.{nf > 0 ? ` · ${nf} gratis` : ""}
         </div>
       </TableCell>
       <TableCell className="align-top text-center">

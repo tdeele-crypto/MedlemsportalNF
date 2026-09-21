@@ -83,6 +83,7 @@ class EventOut(BaseModel):
     total_attendees: int = 0
     total_members: int = 0
     total_non_members: int = 0
+    total_free: int = 0
     checked_in_attendees: int = 0
     expected_revenue: float = 0
     paid_revenue: float = 0
@@ -101,6 +102,7 @@ class ParticipantOut(BaseModel):
     note: str = ""
     num_members: int = 1
     num_non_members: int = 0
+    num_free: int = 0
     paid: bool = False
     checked_in: bool = False
     reminder_sent: bool = False
@@ -112,12 +114,14 @@ class AddParticipantIn(BaseModel):
     note: str = ""
     num_members: int = 1
     num_non_members: int = 0
+    num_free: int = 0
 
 
 class UpdateParticipantIn(BaseModel):
     note: Optional[str] = None
     num_members: Optional[int] = None
     num_non_members: Optional[int] = None
+    num_free: Optional[int] = None
     paid: Optional[bool] = None
     checked_in: Optional[bool] = None
 
@@ -133,6 +137,7 @@ class MemberRegistrationOut(BaseModel):
     address: str = ""
     num_members: int = 1
     num_non_members: int = 0
+    num_free: int = 0
     paid: bool = False
     checked_in: bool = False
     note: str = ""

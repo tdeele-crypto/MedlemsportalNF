@@ -21,6 +21,7 @@ export default function AddParticipantDialog({
   const [note, setNote] = useState("");
   const [numMembers, setNumMembers] = useState(1);
   const [numNonMembers, setNumNonMembers] = useState(0);
+  const [numFree, setNumFree] = useState(0);
   const [saving, setSaving] = useState(false);
 
   const enrolledSet = useMemo(
@@ -45,21 +46,30 @@ export default function AddParticipantDialog({
   useEffect(() => {
     if (!open) {
       setSelected(null); setNote(""); setNumMembers(1); setNumNonMembers(0);
-      setQ(""); setResults([]);
+      setNumFree(0); setQ(""); setResults([]);
     }
   }, [open]);
 
+  const nm = Number(numMembers) || 0;
+  const nnm = Number(numNonMembers) || 0;
+  const nf = Number(numFree) || 0;
+  const total = nm + nnm + nf;
+  const freeTooMany = nf > nm + nnm;
+
   const handleAdd = async () => {
     if (!selected) return;
-    const nm = Number(numMembers) || 0;
-    const nnm = Number(numNonMembers) || 0;
     if (nm + nnm < 1) { toast.error("Antal skal være mindst 1"); return; }
+    if (freeTooMany) {
+      toast.error("Du har angivet flere gratis deltagere end der er tilmeldte");
+      return;
+    }
     setSaving(true);
     try {
       await api.post(`/events/${eventId}/participants`, {
-        member_id: selected.id, note, num_members: nm, num_non_members: nnm,
+        member_id: selected.id, note,
+        num_members: nm, num_non_members: nnm, num_free: nf,
       });
-      toast.success(`${selected.navn} tilmeldt (${nm + nnm} deltagere)`);
+      toast.success(`${selected.navn} tilmeldt (${total} deltagere)`);
       onOpenChange(false);
       await onAdded?.();
     } catch (err) { toast.error(formatApiError(err)); }
@@ -135,7 +145,7 @@ export default function AddParticipantDialog({
                 #{selected.medlemsnummer} · {selected.email} · {selected.telefon}
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="num-members">Antal medlemmer</Label>
                 <Input
@@ -143,6 +153,15 @@ export default function AddParticipantDialog({
                   value={numMembers}
                   onChange={(e) => setNumMembers(e.target.value)}
                   data-testid="num-members-input"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="num-free">Gratis deltagere</Label>
+                <Input
+                  id="num-free" type="number" min="0"
+                  value={numFree}
+                  onChange={(e) => setNumFree(e.target.value)}
+                  data-testid="num-free-input"
                 />
               </div>
               <div className="space-y-2">
@@ -155,9 +174,15 @@ export default function AddParticipantDialog({
                 />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              I alt: <strong>{(Number(numMembers) || 0) + (Number(numNonMembers) || 0)}</strong> deltagere på denne tilmelding
+            <p className="text-xs text-muted-foreground" data-testid="add-participant-total">
+              I alt: <strong>{total}</strong> deltager{total === 1 ? "" : "e"} på denne tilmelding
+              {nf > 0 && !freeTooMany && <span> · <strong>{nf}</strong> gratis</span>}
             </p>
+            {freeTooMany && (
+              <p className="text-xs text-destructive" data-testid="add-participant-free-error">
+                Du har angivet {nf} gratis, men kun {nm + nnm} tilmeldte. Reducér gratis eller tilføj flere personer.
+              </p>
+            )}
             <div className="space-y-2">
               <Label htmlFor="note">Note (valgfri)</Label>
               <Textarea
@@ -178,7 +203,7 @@ export default function AddParticipantDialog({
                 Tilbage
               </Button>
               <Button
-                type="button" onClick={handleAdd} disabled={saving}
+                type="button" onClick={handleAdd} disabled={saving || freeTooMany}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 data-testid="participant-confirm-add"
               >{saving ? "Tilføjer..." : "Tilføj"}</Button>

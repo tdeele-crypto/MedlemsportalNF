@@ -20,13 +20,14 @@ def event_to_out(
     count: int = 0,
     total_members: int = 0,
     total_non_members: int = 0,
+    total_free: int = 0,
     expected_revenue: float = 0.0,
     paid_revenue: float = 0.0,
     checked_in_attendees: int = 0,
 ) -> dict:
     max_p = doc.get("max_participants")
     max_p = int(max_p) if isinstance(max_p, (int, float)) and max_p else None
-    total_att = total_members + total_non_members
+    total_att = total_members + total_non_members + total_free
     free_spots = max(0, max_p - total_att) if max_p is not None else None
     return {
         "id": str(doc["_id"]),
@@ -53,6 +54,7 @@ def event_to_out(
         "participant_count": count,
         "total_members": total_members,
         "total_non_members": total_non_members,
+        "total_free": total_free,
         "total_attendees": total_att,
         "checked_in_attendees": checked_in_attendees,
         "expected_revenue": round(expected_revenue, 2),
@@ -74,6 +76,7 @@ def participant_to_out(doc) -> dict:
         "note": doc.get("note", ""),
         "num_members": int(doc.get("num_members", 1) or 0),
         "num_non_members": int(doc.get("num_non_members", 0) or 0),
+        "num_free": int(doc.get("num_free", 0) or 0),
         "paid": bool(doc.get("paid", False)),
         "checked_in": bool(doc.get("checked_in", False)),
         "reminder_sent": bool(doc.get("reminder_sent", False)),
@@ -105,9 +108,26 @@ async def resolve_contact(db, member_id: str | None) -> dict:
     return out
 
 
+def compute_paying(num_members: int, num_non_members: int, num_free: int) -> tuple[int, int]:
+    """Given counts on one participant row, return (paying_members, paying_non_members)
+    after applying the free discount to members first, then non-members."""
+    m = max(0, int(num_members or 0))
+    nm = max(0, int(num_non_members or 0))
+    f = max(0, int(num_free or 0))
+    free_on_m = min(f, m)
+    pay_m = m - free_on_m
+    free_rem = f - free_on_m
+    free_on_nm = min(free_rem, nm)
+    pay_nm = nm - free_on_nm
+    return pay_m, pay_nm
+
+
 async def aggregate_event_totals(db, event_id: str):
-    """Returns (count, total_members, total_non_members, expected_revenue,
-    paid_revenue, checked_in_attendees) for one event."""
+    """Returns (count, total_members, total_non_members, total_free,
+    expected_revenue, paid_revenue, checked_in_attendees) for one event.
+
+    Free participants add to attendee count but do not add to revenue.
+    Discount applies to members first, then non-members."""
     ev = (
         await db.events.find_one({"_id": ObjectId(event_id)})
         if ObjectId.is_valid(event_id)
@@ -115,37 +135,27 @@ async def aggregate_event_totals(db, event_id: str):
     )
     price_m = float((ev or {}).get("price_member", 0) or 0)
     price_nm = float((ev or {}).get("price_non_member", 0) or 0)
-    pipeline = [
-        {"$match": {"event_id": event_id}},
-        {"$group": {
-            "_id": None,
-            "count": {"$sum": 1},
-            "members": {"$sum": {"$ifNull": ["$num_members", 1]}},
-            "non_members": {"$sum": {"$ifNull": ["$num_non_members", 0]}},
-            "paid_members": {"$sum": {"$cond": [
-                {"$eq": ["$paid", True]},
-                {"$ifNull": ["$num_members", 1]}, 0,
-            ]}},
-            "paid_non_members": {"$sum": {"$cond": [
-                {"$eq": ["$paid", True]},
-                {"$ifNull": ["$num_non_members", 0]}, 0,
-            ]}},
-            "checked_in": {"$sum": {"$cond": [
-                {"$eq": ["$checked_in", True]},
-                {"$add": [
-                    {"$ifNull": ["$num_members", 1]},
-                    {"$ifNull": ["$num_non_members", 0]},
-                ]}, 0,
-            ]}},
-        }},
-    ]
-    agg = await db.participants.aggregate(pipeline).to_list(1)
-    if agg:
-        a = agg[0]
-        members = int(a["members"])
-        non_members = int(a["non_members"])
-        expected = members * price_m + non_members * price_nm
-        paid = int(a["paid_members"]) * price_m + int(a["paid_non_members"]) * price_nm
-        checked_in = int(a.get("checked_in", 0) or 0)
-        return a["count"], members, non_members, expected, paid, checked_in
-    return 0, 0, 0, 0.0, 0.0, 0
+
+    count = 0
+    total_m = 0
+    total_nm = 0
+    total_free = 0
+    expected = 0.0
+    paid = 0.0
+    checked_in = 0
+    async for p in db.participants.find({"event_id": event_id}):
+        m = int(p.get("num_members", 1) or 0)
+        nm = int(p.get("num_non_members", 0) or 0)
+        f = int(p.get("num_free", 0) or 0)
+        pay_m, pay_nm = compute_paying(m, nm, f)
+        row_expected = pay_m * price_m + pay_nm * price_nm
+        count += 1
+        total_m += m
+        total_nm += nm
+        total_free += f
+        expected += row_expected
+        if p.get("paid"):
+            paid += row_expected
+        if p.get("checked_in"):
+            checked_in += m + nm + f
+    return count, total_m, total_nm, total_free, expected, paid, checked_in
