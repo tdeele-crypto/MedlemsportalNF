@@ -233,6 +233,7 @@ function ParticipantRow({ p, isAdmin, onTogglePaid, onToggleCheckedIn, onEdit, o
           checked={!!p.paid}
           onCheckedChange={() => isAdmin && onTogglePaid(p)}
           disabled={!isAdmin}
+          data-testid={`paid-checkbox-desktop-${p.id}`}
           aria-label="Betalt"
         />
       </TableCell>
@@ -241,6 +242,7 @@ function ParticipantRow({ p, isAdmin, onTogglePaid, onToggleCheckedIn, onEdit, o
           checked={!!p.checked_in}
           onCheckedChange={() => isAdmin && onToggleCheckedIn(p)}
           disabled={!isAdmin}
+          data-testid={`checkin-checkbox-desktop-${p.id}`}
           aria-label="Mødt op"
         />
       </TableCell>
@@ -255,6 +257,7 @@ function ParticipantRow({ p, isAdmin, onTogglePaid, onToggleCheckedIn, onEdit, o
               variant="ghost"
               onClick={() => onEdit(p)}
               title="Rediger tilmelding"
+              data-testid={`edit-participant-desktop-${p.id}`}
             >
               <Pencil className="w-4 h-4" strokeWidth={1.6} />
             </Button>
@@ -264,6 +267,7 @@ function ParticipantRow({ p, isAdmin, onTogglePaid, onToggleCheckedIn, onEdit, o
                   size="icon"
                   variant="ghost"
                   className="text-muted-foreground hover:text-destructive"
+                  data-testid={`remove-participant-desktop-${p.id}`}
                 >
                   <Trash2 className="w-4 h-4" strokeWidth={1.6} />
                 </Button>
