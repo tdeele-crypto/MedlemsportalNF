@@ -176,7 +176,94 @@ export default function UsersPage() {
         </Dialog>
       </div>
 
-      <div className="mt-8 border border-border rounded-md bg-white overflow-hidden">
+      {/* Mobile: card list */}
+      <div className="mt-8 md:hidden space-y-3" data-testid="users-list-mobile">
+        {users.length === 0 ? (
+          <div className="border border-dashed border-border rounded-md bg-white p-8 text-center text-sm text-muted-foreground">
+            Ingen brugere endnu.
+          </div>
+        ) : (
+          users.map((u) => (
+            <div
+              key={u.id}
+              data-testid={`user-row-${u.id}`}
+              className="border border-border rounded-md bg-white p-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-foreground break-words">{u.name || "—"}</div>
+                  <a
+                    href={`mailto:${u.email}`}
+                    className="text-xs text-primary hover:underline break-all"
+                  >
+                    {u.email}
+                  </a>
+                </div>
+                <div className="shrink-0">
+                  {u.role === "admin" ? (
+                    <Badge className="bg-primary/10 text-primary hover:bg-primary/10 border-primary/20">
+                      Administrator
+                    </Badge>
+                  ) : u.role === "editor" ? (
+                    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200">
+                      Editor
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="font-normal">Bruger</Badge>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-border flex items-center justify-end gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => openEdit(u)}
+                  data-testid={`edit-user-${u.id}`}
+                >
+                  <Pencil className="w-3.5 h-3.5 mr-1.5" strokeWidth={1.6} />
+                  Rediger
+                </Button>
+                {u.id !== user?.id && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-destructive"
+                        data-testid={`delete-user-${u.id}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mr-1.5" strokeWidth={1.6} />
+                        Slet
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="bg-white">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Slet {u.email}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Brugeren mister adgang til systemet. Dette kan ikke fortrydes.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel data-testid={`delete-user-cancel-${u.id}`}>Annullér</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => handleDelete(u.id)}
+                          className="bg-destructive hover:bg-destructive/90"
+                          data-testid={`delete-user-confirm-${u.id}`}
+                        >
+                          Slet
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Desktop: table */}
+      <div className="mt-8 border border-border rounded-md bg-white overflow-hidden hidden md:block">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -188,7 +275,7 @@ export default function UsersPage() {
           </TableHeader>
           <TableBody>
             {users.map((u) => (
-              <TableRow key={u.id} data-testid={`user-row-${u.id}`}>
+              <TableRow key={u.id} data-testid={`user-row-desktop-${u.id}`}>
                 <TableCell className="font-medium">{u.name || "—"}</TableCell>
                 <TableCell>{u.email}</TableCell>
                 <TableCell>
@@ -211,7 +298,7 @@ export default function UsersPage() {
                       variant="ghost"
                       onClick={() => openEdit(u)}
                       title="Rediger bruger"
-                      data-testid={`edit-user-${u.id}`}
+                      data-testid={`edit-user-desktop-${u.id}`}
                     >
                       <Pencil className="w-4 h-4" strokeWidth={1.6} />
                     </Button>
@@ -222,7 +309,7 @@ export default function UsersPage() {
                           size="icon"
                           variant="ghost"
                           className="text-muted-foreground hover:text-destructive"
-                          data-testid={`delete-user-${u.id}`}
+                          data-testid={`delete-user-desktop-${u.id}`}
                         >
                           <Trash2 className="w-4 h-4" strokeWidth={1.6} />
                         </Button>
@@ -235,11 +322,10 @@ export default function UsersPage() {
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel data-testid={`delete-user-cancel-${u.id}`}>Annullér</AlertDialogCancel>
+                          <AlertDialogCancel>Annullér</AlertDialogCancel>
                           <AlertDialogAction
                             onClick={() => handleDelete(u.id)}
                             className="bg-destructive hover:bg-destructive/90"
-                            data-testid={`delete-user-confirm-${u.id}`}
                           >
                             Slet
                           </AlertDialogAction>
