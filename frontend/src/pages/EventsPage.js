@@ -295,23 +295,25 @@ export default function EventsPage() {
             <div className="p-6 flex-1 flex flex-col">
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-lg text-foreground truncate">{ev.title}</h3>
+                  <h3 className="font-semibold text-lg text-foreground line-clamp-2 break-words">{ev.title}</h3>
                 <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                   {ev.event_date && (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4" strokeWidth={1.5} />
-                      {new Date(ev.event_date).toLocaleDateString("da-DK", {
-                        weekday: "short",
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      })}
-                      {ev.event_time && <span className="ml-1">kl. {ev.event_time}</span>}
+                    <div className="flex items-start gap-2">
+                      <Calendar className="w-4 h-4 mt-0.5 shrink-0" strokeWidth={1.5} />
+                      <span>
+                        {new Date(ev.event_date).toLocaleDateString("da-DK", {
+                          weekday: "short",
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                        })}
+                        {ev.event_time && <> kl. {ev.event_time}</>}
+                      </span>
                     </div>
                   )}
                   {ev.location && (
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4" strokeWidth={1.5} />
+                    <div className="flex items-start gap-2">
+                      <MapPin className="w-4 h-4 mt-0.5 shrink-0" strokeWidth={1.5} />
                       <span>
                         {ev.location}
                         {ev.address && <span className="text-muted-foreground/80"> · {ev.address}</span>}
@@ -319,14 +321,14 @@ export default function EventsPage() {
                     </div>
                   )}
                   {!ev.location && ev.address && (
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4" strokeWidth={1.5} />
-                      {ev.address}
+                    <div className="flex items-start gap-2">
+                      <MapPin className="w-4 h-4 mt-0.5 shrink-0" strokeWidth={1.5} />
+                      <span>{ev.address}</span>
                     </div>
                   )}
                 </div>
               </div>
-              <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" strokeWidth={1.6} />
+              <ArrowRight className="w-4 h-4 mt-1 shrink-0 text-muted-foreground group-hover:text-primary transition-colors hidden sm:block" strokeWidth={1.6} />
             </div>
             <div className="mt-4 pt-4 border-t border-border flex items-baseline justify-between gap-3 flex-wrap">
               <div className="flex items-baseline gap-4 text-sm">

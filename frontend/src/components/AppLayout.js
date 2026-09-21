@@ -93,7 +93,7 @@ export default function AppLayout() {
           </Button>
         </header>
         <div className="md:hidden border-b border-border bg-white overflow-x-auto">
-          <nav className="flex gap-1 px-3 py-2">
+          <nav className="flex gap-0.5 px-2 py-2">
             {items.map((it) => (
               <NavLink
                 key={it.key}
@@ -102,7 +102,7 @@ export default function AppLayout() {
                 data-testid={`nav-mobile-${it.key}`}
                 className={({ isActive }) =>
                   cn(
-                    "px-3 py-1.5 rounded-md text-xs whitespace-nowrap",
+                    "px-2.5 py-1.5 rounded-md text-xs whitespace-nowrap flex-shrink-0",
                     isActive ? "bg-primary/10 text-primary font-medium" : "text-foreground/70"
                   )
                 }
