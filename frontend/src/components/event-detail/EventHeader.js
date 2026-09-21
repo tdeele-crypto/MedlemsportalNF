@@ -118,13 +118,13 @@ export default function EventHeader({ event, isAdmin, participantsCount, onEdit 
           )}
           <div className="mt-2 text-xs text-muted-foreground">
             <span data-testid="total-members">{event.total_members ?? 0}</span> medlem{(event.total_members ?? 0) === 1 ? "" : "mer"}
+            {(event.total_members_free ?? 0) > 0 && (
+              <> (<span data-testid="total-members-free">{event.total_members_free}</span> gratis)</>
+            )}
             {" · "}
             <span data-testid="total-non-members">{event.total_non_members ?? 0}</span> ikke-medl.
-            {(event.total_free ?? 0) > 0 && (
-              <>
-                {" · "}
-                <span data-testid="total-free">{event.total_free}</span> gratis
-              </>
+            {(event.total_non_members_free ?? 0) > 0 && (
+              <> (<span data-testid="total-non-members-free">{event.total_non_members_free}</span> gratis)</>
             )}
           </div>
           <div className="mt-1 text-xs text-muted-foreground">

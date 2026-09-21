@@ -160,26 +160,31 @@ def _html_wrap(title: str, body_html: str) -> str:
 </body></html>"""
 
 
-async def send_registration_email(member: dict, event: dict, num_members: int, num_non_members: int, note: str, price_member: float, price_non_member: float, num_free: int = 0) -> bool:
+async def send_registration_email(member: dict, event: dict, num_members: int, num_non_members: int, note: str, price_member: float, price_non_member: float, num_members_free: int = 0, num_non_members_free: int = 0) -> bool:
     to_email = (member.get("email") or "").strip()
     if not to_email:
         return False
-    total = num_members + num_non_members + num_free
+    # Free is a subset of each category — total attendees is m + nm
+    total = num_members + num_non_members
     title = event.get("title", "Arrangement")
     summary = _event_summary(event)
     summary_html = _event_summary_html(event)
-    # Free discount applies to members first, then non-members
-    free_on_m = min(num_free, num_members)
-    pay_m = num_members - free_on_m
-    pay_nm = num_non_members - min(num_free - free_on_m, num_non_members)
+    mf = min(max(0, num_members_free), num_members)
+    nmf = min(max(0, num_non_members_free), num_non_members)
+    pay_m = num_members - mf
+    pay_nm = num_non_members - nmf
     expected = pay_m * (price_member or 0) + pay_nm * (price_non_member or 0)
     price_line = ""
     if expected > 0:
         price_line = f"\nForventet betaling: {expected:g} kr."
 
-    breakdown = f"{num_members} medlemmer + {num_non_members} ikke-medlemmer"
-    if num_free > 0:
-        breakdown += f" + {num_free} gratis"
+    m_part = f"{num_members} medlem{'mer' if num_members != 1 else ''}"
+    if mf > 0:
+        m_part += f" (heraf {mf} gratis)"
+    nm_part = f"{num_non_members} ikke-medlem{'mer' if num_non_members != 1 else ''}"
+    if nmf > 0:
+        nm_part += f" (heraf {nmf} gratis)"
+    breakdown = f"{m_part} + {nm_part}"
 
     text = (
         f"Hej {member.get('navn', '')}\n\n"

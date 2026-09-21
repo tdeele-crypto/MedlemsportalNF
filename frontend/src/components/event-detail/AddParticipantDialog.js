@@ -20,8 +20,9 @@ export default function AddParticipantDialog({
   const [selected, setSelected] = useState(null);
   const [note, setNote] = useState("");
   const [numMembers, setNumMembers] = useState(1);
+  const [numMembersFree, setNumMembersFree] = useState(0);
   const [numNonMembers, setNumNonMembers] = useState(0);
-  const [numFree, setNumFree] = useState(0);
+  const [numNonMembersFree, setNumNonMembersFree] = useState(0);
   const [saving, setSaving] = useState(false);
 
   const enrolledSet = useMemo(
@@ -45,31 +46,37 @@ export default function AddParticipantDialog({
 
   useEffect(() => {
     if (!open) {
-      setSelected(null); setNote(""); setNumMembers(1); setNumNonMembers(0);
-      setNumFree(0); setQ(""); setResults([]);
+      setSelected(null); setNote("");
+      setNumMembers(1); setNumMembersFree(0);
+      setNumNonMembers(0); setNumNonMembersFree(0);
+      setQ(""); setResults([]);
     }
   }, [open]);
 
   const nm = Number(numMembers) || 0;
+  const nmf = Number(numMembersFree) || 0;
   const nnm = Number(numNonMembers) || 0;
-  const nf = Number(numFree) || 0;
-  const total = nm + nnm + nf;
-  const freeTooMany = nf > nm + nnm;
+  const nnmf = Number(numNonMembersFree) || 0;
+  const total = nm + nnm;
+  const membersFreeError = nmf > nm;
+  const nonMembersFreeError = nnmf > nnm;
+  const hasError = membersFreeError || nonMembersFreeError;
 
   const handleAdd = async () => {
     if (!selected) return;
     if (nm + nnm < 1) { toast.error("Antal skal være mindst 1"); return; }
-    if (freeTooMany) {
-      toast.error("Du har angivet flere gratis deltagere end der er tilmeldte");
+    if (hasError) {
+      toast.error("Antal gratis kan ikke overstige antal tilmeldte");
       return;
     }
     setSaving(true);
     try {
       await api.post(`/events/${eventId}/participants`, {
         member_id: selected.id, note,
-        num_members: nm, num_non_members: nnm, num_free: nf,
+        num_members: nm, num_members_free: nmf,
+        num_non_members: nnm, num_non_members_free: nnmf,
       });
-      toast.success(`${selected.navn} tilmeldt (${total} deltagere)`);
+      toast.success(`${selected.navn} tilmeldt (${total} deltager${total === 1 ? "" : "e"})`);
       onOpenChange(false);
       await onAdded?.();
     } catch (err) { toast.error(formatApiError(err)); }
@@ -145,7 +152,8 @@ export default function AddParticipantDialog({
                 #{selected.medlemsnummer} · {selected.email} · {selected.telefon}
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Members pair */}
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="num-members">Antal medlemmer</Label>
                 <Input
@@ -156,14 +164,19 @@ export default function AddParticipantDialog({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="num-free">Gratis deltagere</Label>
+                <Label htmlFor="num-members-free">Hvoraf er gratis</Label>
                 <Input
-                  id="num-free" type="number" min="0"
-                  value={numFree}
-                  onChange={(e) => setNumFree(e.target.value)}
-                  data-testid="num-free-input"
+                  id="num-members-free" type="number" min="0"
+                  value={numMembersFree}
+                  onChange={(e) => setNumMembersFree(e.target.value)}
+                  data-testid="num-members-free-input"
+                  aria-invalid={membersFreeError}
+                  className={membersFreeError ? "border-destructive focus-visible:ring-destructive" : ""}
                 />
               </div>
+            </div>
+            {/* Non-members pair */}
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="num-non-members">Antal ikke-medlemmer</Label>
                 <Input
@@ -173,14 +186,32 @@ export default function AddParticipantDialog({
                   data-testid="num-non-members-input"
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="num-non-members-free">Hvoraf er gratis</Label>
+                <Input
+                  id="num-non-members-free" type="number" min="0"
+                  value={numNonMembersFree}
+                  onChange={(e) => setNumNonMembersFree(e.target.value)}
+                  data-testid="num-non-members-free-input"
+                  aria-invalid={nonMembersFreeError}
+                  className={nonMembersFreeError ? "border-destructive focus-visible:ring-destructive" : ""}
+                />
+              </div>
             </div>
             <p className="text-xs text-muted-foreground" data-testid="add-participant-total">
-              I alt: <strong>{total}</strong> deltager{total === 1 ? "" : "e"} på denne tilmelding
-              {nf > 0 && !freeTooMany && <span> · <strong>{nf}</strong> gratis</span>}
+              I alt: <strong>{total}</strong> deltager{total === 1 ? "" : "e"}
+              {(nmf > 0 || nnmf > 0) && !hasError && (
+                <span> · <strong>{nmf + nnmf}</strong> gratis</span>
+              )}
             </p>
-            {freeTooMany && (
-              <p className="text-xs text-destructive" data-testid="add-participant-free-error">
-                Du har angivet {nf} gratis, men kun {nm + nnm} tilmeldte. Reducér gratis eller tilføj flere personer.
+            {membersFreeError && (
+              <p className="text-xs text-destructive" data-testid="add-participant-members-free-error">
+                Gratis medlemmer ({nmf}) kan ikke overstige antal medlemmer ({nm}).
+              </p>
+            )}
+            {nonMembersFreeError && (
+              <p className="text-xs text-destructive" data-testid="add-participant-non-members-free-error">
+                Gratis ikke-medlemmer ({nnmf}) kan ikke overstige antal ikke-medlemmer ({nnm}).
               </p>
             )}
             <div className="space-y-2">
@@ -203,7 +234,7 @@ export default function AddParticipantDialog({
                 Tilbage
               </Button>
               <Button
-                type="button" onClick={handleAdd} disabled={saving || freeTooMany}
+                type="button" onClick={handleAdd} disabled={saving || hasError}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground"
                 data-testid="participant-confirm-add"
               >{saving ? "Tilføjer..." : "Tilføj"}</Button>

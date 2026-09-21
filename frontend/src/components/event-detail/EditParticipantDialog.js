@@ -10,35 +10,45 @@ import {
 import { toast } from "sonner";
 
 export default function EditParticipantDialog({ participant, eventId, onClose, onSaved }) {
-  const [form, setForm] = useState({ num_members: 1, num_non_members: 0, num_free: 0, note: "" });
+  const [form, setForm] = useState({
+    num_members: 1, num_members_free: 0,
+    num_non_members: 0, num_non_members_free: 0,
+    note: "",
+  });
 
   useEffect(() => {
     if (participant) {
       setForm({
         num_members: participant.num_members ?? 1,
+        num_members_free: participant.num_members_free ?? 0,
         num_non_members: participant.num_non_members ?? 0,
-        num_free: participant.num_free ?? 0,
+        num_non_members_free: participant.num_non_members_free ?? 0,
         note: participant.note ?? "",
       });
     }
   }, [participant]);
 
   const nm = Number(form.num_members) || 0;
+  const nmf = Number(form.num_members_free) || 0;
   const nnm = Number(form.num_non_members) || 0;
-  const nf = Number(form.num_free) || 0;
-  const total = nm + nnm + nf;
-  const freeTooMany = nf > nm + nnm;
+  const nnmf = Number(form.num_non_members_free) || 0;
+  const total = nm + nnm;
+  const membersFreeError = nmf > nm;
+  const nonMembersFreeError = nnmf > nnm;
+  const hasError = membersFreeError || nonMembersFreeError;
 
   const handleSave = async () => {
     if (!participant) return;
     if (nm + nnm < 1) { toast.error("Antal skal være mindst 1"); return; }
-    if (freeTooMany) {
-      toast.error("Du har angivet flere gratis deltagere end der er tilmeldte");
+    if (hasError) {
+      toast.error("Antal gratis kan ikke overstige antal tilmeldte");
       return;
     }
     try {
       await api.patch(`/events/${eventId}/participants/${participant.id}`, {
-        num_members: nm, num_non_members: nnm, num_free: nf, note: form.note,
+        num_members: nm, num_members_free: nmf,
+        num_non_members: nnm, num_non_members_free: nnmf,
+        note: form.note,
       });
       toast.success("Tilmelding opdateret");
       onClose();
@@ -56,7 +66,8 @@ export default function EditParticipantDialog({ participant, eventId, onClose, o
           <DialogTitle>Rediger tilmelding{participant ? ` – ${participant.navn}` : ""}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Members pair */}
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="edit-num-members">Antal medlemmer</Label>
               <Input
@@ -67,14 +78,19 @@ export default function EditParticipantDialog({ participant, eventId, onClose, o
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-num-free">Gratis deltagere</Label>
+              <Label htmlFor="edit-num-members-free">Hvoraf er gratis</Label>
               <Input
-                id="edit-num-free" type="number" min="0"
-                value={form.num_free}
-                onChange={(e) => setForm({ ...form, num_free: e.target.value })}
-                data-testid="edit-num-free-input"
+                id="edit-num-members-free" type="number" min="0"
+                value={form.num_members_free}
+                onChange={(e) => setForm({ ...form, num_members_free: e.target.value })}
+                data-testid="edit-num-members-free-input"
+                aria-invalid={membersFreeError}
+                className={membersFreeError ? "border-destructive focus-visible:ring-destructive" : ""}
               />
             </div>
+          </div>
+          {/* Non-members pair */}
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="edit-num-non-members">Antal ikke-medlemmer</Label>
               <Input
@@ -84,14 +100,32 @@ export default function EditParticipantDialog({ participant, eventId, onClose, o
                 data-testid="edit-num-non-members-input"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-num-non-members-free">Hvoraf er gratis</Label>
+              <Input
+                id="edit-num-non-members-free" type="number" min="0"
+                value={form.num_non_members_free}
+                onChange={(e) => setForm({ ...form, num_non_members_free: e.target.value })}
+                data-testid="edit-num-non-members-free-input"
+                aria-invalid={nonMembersFreeError}
+                className={nonMembersFreeError ? "border-destructive focus-visible:ring-destructive" : ""}
+              />
+            </div>
           </div>
           <p className="text-xs text-muted-foreground" data-testid="edit-participant-total">
             I alt: <strong>{total}</strong> deltager{total === 1 ? "" : "e"}
-            {nf > 0 && !freeTooMany && <span> · <strong>{nf}</strong> gratis</span>}
+            {(nmf > 0 || nnmf > 0) && !hasError && (
+              <span> · <strong>{nmf + nnmf}</strong> gratis</span>
+            )}
           </p>
-          {freeTooMany && (
-            <p className="text-xs text-destructive" data-testid="edit-participant-free-error">
-              Du har angivet {nf} gratis, men kun {nm + nnm} tilmeldte. Reducér gratis eller tilføj flere personer.
+          {membersFreeError && (
+            <p className="text-xs text-destructive" data-testid="edit-participant-members-free-error">
+              Gratis medlemmer ({nmf}) kan ikke overstige antal medlemmer ({nm}).
+            </p>
+          )}
+          {nonMembersFreeError && (
+            <p className="text-xs text-destructive" data-testid="edit-participant-non-members-free-error">
+              Gratis ikke-medlemmer ({nnmf}) kan ikke overstige antal ikke-medlemmer ({nnm}).
             </p>
           )}
           <div className="space-y-2">
@@ -109,7 +143,7 @@ export default function EditParticipantDialog({ participant, eventId, onClose, o
           <Button variant="ghost" onClick={onClose} data-testid="edit-participant-cancel">Annullér</Button>
           <Button
             onClick={handleSave}
-            disabled={freeTooMany}
+            disabled={hasError}
             className="bg-primary hover:bg-primary/90 text-primary-foreground"
             data-testid="edit-participant-save"
           >Gem ændringer</Button>

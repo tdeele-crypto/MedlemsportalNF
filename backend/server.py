@@ -216,8 +216,9 @@ async def get_member_registrations(member_id: str, _admin: dict = Depends(requir
             "location": (ev or {}).get("location", ""),
             "address": (ev or {}).get("address", ""),
             "num_members": int(p.get("num_members", 1) or 0),
+            "num_members_free": int(p.get("num_members_free", 0) or 0),
             "num_non_members": int(p.get("num_non_members", 0) or 0),
-            "num_free": int(p.get("num_free", 0) or 0),
+            "num_non_members_free": int(p.get("num_non_members_free", 0) or 0),
             "paid": bool(p.get("paid", False)),
             "checked_in": bool(p.get("checked_in", False)),
             "note": p.get("note", ""),
@@ -285,8 +286,8 @@ async def list_events(_user: dict = Depends(get_current_user)):
     today_iso = datetime.now(timezone.utc).date().isoformat()
     items = []
     async for ev in db.events.find({}):
-        count, members, non_members, free_att, expected, paid, checked_in = await aggregate_event_totals(db, str(ev["_id"]))
-        items.append(event_to_out(ev, count, members, non_members, free_att, expected, paid, checked_in))
+        count, m, mf, nm, nmf, expected, paid, checked_in = await aggregate_event_totals(db, str(ev["_id"]))
+        items.append(event_to_out(ev, count, m, mf, nm, nmf, expected, paid, checked_in))
 
     def sort_key(e):
         d = e.get("event_date") or ""
@@ -328,7 +329,7 @@ async def create_event(payload: EventIn, _admin: dict = Depends(require_admin)):
            "created_at": datetime.now(timezone.utc).isoformat()}
     res = await db.events.insert_one(doc)
     doc["_id"] = res.inserted_id
-    return event_to_out(doc, 0, 0, 0, 0, 0.0, 0.0, 0)
+    return event_to_out(doc, 0, 0, 0, 0, 0, 0.0, 0.0, 0)
 
 
 @api.get("/events/{event_id}", response_model=EventOut)
@@ -338,8 +339,8 @@ async def get_event(event_id: str, _user: dict = Depends(get_current_user)):
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
     if not ev:
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
-    count, members, non_members, free_att, expected, paid, checked_in = await aggregate_event_totals(db, event_id)
-    return event_to_out(ev, count, members, non_members, free_att, expected, paid, checked_in)
+    count, m, mf, nm, nmf, expected, paid, checked_in = await aggregate_event_totals(db, event_id)
+    return event_to_out(ev, count, m, mf, nm, nmf, expected, paid, checked_in)
 
 
 @api.patch("/events/{event_id}", response_model=EventOut)
@@ -352,8 +353,8 @@ async def update_event(event_id: str, payload: EventIn, _admin: dict = Depends(r
     ev = await db.events.find_one({"_id": ObjectId(event_id)})
     if not ev:
         raise HTTPException(status_code=404, detail="Arrangement ikke fundet")
-    count, members, non_members, free_att, expected, paid, checked_in = await aggregate_event_totals(db, event_id)
-    return event_to_out(ev, count, members, non_members, free_att, expected, paid, checked_in)
+    count, m, mf, nm, nmf, expected, paid, checked_in = await aggregate_event_totals(db, event_id)
+    return event_to_out(ev, count, m, mf, nm, nmf, expected, paid, checked_in)
 
 
 @api.delete("/events/{event_id}")
@@ -391,20 +392,26 @@ async def add_participant(
         raise HTTPException(status_code=404, detail="Medlem ikke fundet")
     num_m = max(0, int(payload.num_members or 0))
     num_nm = max(0, int(payload.num_non_members or 0))
-    num_free = max(0, int(payload.num_free or 0))
+    num_mf = max(0, int(payload.num_members_free or 0))
+    num_nmf = max(0, int(payload.num_non_members_free or 0))
     if num_m + num_nm < 1:
         num_m = 1
-    if num_free > num_m + num_nm:
+    if num_mf > num_m:
         raise HTTPException(
             status_code=400,
-            detail="Du har angivet flere gratis deltagere end der er tilmeldte medlemmer/ikke-medlemmer.",
+            detail="Antal gratis medlemmer kan ikke overstige antal medlemmer.",
         )
-    # Enforce max_participants if set
+    if num_nmf > num_nm:
+        raise HTTPException(
+            status_code=400,
+            detail="Antal gratis ikke-medlemmer kan ikke overstige antal ikke-medlemmer.",
+        )
+    # Enforce max_participants if set (free is a subset — only m+nm counts)
     max_p = ev.get("max_participants")
     if isinstance(max_p, (int, float)) and max_p:
-        _, members, non_members, free_att, _, _, _ = await aggregate_event_totals(db, event_id)
-        if members + non_members + free_att + num_m + num_nm + num_free > int(max_p):
-            free = max(0, int(max_p) - (members + non_members + free_att))
+        _, members, _, non_members, _, _, _, _ = await aggregate_event_totals(db, event_id)
+        if members + non_members + num_m + num_nm > int(max_p):
+            free = max(0, int(max_p) - (members + non_members))
             raise HTTPException(
                 status_code=400,
                 detail=f"Arrangementet er fuldt. Der er kun {free} ledig{'e' if free != 1 else ''} plads{'er' if free != 1 else ''} tilbage.",
@@ -419,8 +426,9 @@ async def add_participant(
         "telefon": member.get("telefon", ""),
         "note": payload.note or "",
         "num_members": num_m,
+        "num_members_free": num_mf,
         "num_non_members": num_nm,
-        "num_free": num_free,
+        "num_non_members_free": num_nmf,
         "paid": False,
         "checked_in": False,
         "reminder_sent": False,
@@ -434,7 +442,7 @@ async def add_participant(
             member, ev, num_m, num_nm, payload.note or "",
             float(ev.get("price_member", 0) or 0),
             float(ev.get("price_non_member", 0) or 0),
-            num_free,
+            num_mf, num_nmf,
         )
     return participant_to_out(doc)
 
@@ -445,10 +453,12 @@ def _build_participant_update(payload: UpdateParticipantIn) -> dict:
         update["note"] = payload.note
     if payload.num_members is not None:
         update["num_members"] = max(0, int(payload.num_members))
+    if payload.num_members_free is not None:
+        update["num_members_free"] = max(0, int(payload.num_members_free))
     if payload.num_non_members is not None:
         update["num_non_members"] = max(0, int(payload.num_non_members))
-    if payload.num_free is not None:
-        update["num_free"] = max(0, int(payload.num_free))
+    if payload.num_non_members_free is not None:
+        update["num_non_members_free"] = max(0, int(payload.num_non_members_free))
     if payload.paid is not None:
         update["paid"] = bool(payload.paid)
     if payload.checked_in is not None:
@@ -469,28 +479,33 @@ async def update_participant(
     if not existing:
         raise HTTPException(status_code=404, detail="Tilmelding ikke fundet")
     update = _build_participant_update(payload)
-    # Compute new effective counts (falling back to existing values)
-    if update and ("num_members" in update or "num_non_members" in update or "num_free" in update):
+    if update and any(k in update for k in ("num_members", "num_members_free", "num_non_members", "num_non_members_free")):
         old_m = int(existing.get("num_members", 1) or 0)
+        old_mf = int(existing.get("num_members_free", 0) or 0)
         old_nm = int(existing.get("num_non_members", 0) or 0)
-        old_f = int(existing.get("num_free", 0) or 0)
+        old_nmf = int(existing.get("num_non_members_free", 0) or 0)
         new_m = int(update.get("num_members", old_m))
+        new_mf = int(update.get("num_members_free", old_mf))
         new_nm = int(update.get("num_non_members", old_nm))
-        new_f = int(update.get("num_free", old_f))
-        # Validate free <= members + non_members
-        if new_f > new_m + new_nm:
+        new_nmf = int(update.get("num_non_members_free", old_nmf))
+        if new_mf > new_m:
             raise HTTPException(
                 status_code=400,
-                detail="Du har angivet flere gratis deltagere end der er tilmeldte medlemmer/ikke-medlemmer.",
+                detail="Antal gratis medlemmer kan ikke overstige antal medlemmer.",
             )
-        # If raising counts, check max_participants
+        if new_nmf > new_nm:
+            raise HTTPException(
+                status_code=400,
+                detail="Antal gratis ikke-medlemmer kan ikke overstige antal ikke-medlemmer.",
+            )
+        # If raising total (m+nm), check max_participants
         ev = await db.events.find_one({"_id": ObjectId(event_id)})
         max_p = (ev or {}).get("max_participants")
         if isinstance(max_p, (int, float)) and max_p:
-            _, members, non_members, free_att, _, _, _ = await aggregate_event_totals(db, event_id)
-            delta = (new_m + new_nm + new_f) - (old_m + old_nm + old_f)
-            if delta > 0 and members + non_members + free_att + delta > int(max_p):
-                free = max(0, int(max_p) - (members + non_members + free_att))
+            _, members, _, non_members, _, _, _, _ = await aggregate_event_totals(db, event_id)
+            delta = (new_m + new_nm) - (old_m + old_nm)
+            if delta > 0 and members + non_members + delta > int(max_p):
+                free = max(0, int(max_p) - (members + non_members))
                 raise HTTPException(
                     status_code=400,
                     detail=f"Kan ikke øge antallet — kun {free} ledig{'e' if free != 1 else ''} plads{'er' if free != 1 else ''} tilbage.",
@@ -533,18 +548,20 @@ async def export_participants_csv(event_id: str, _admin: dict = Depends(require_
     writer = csv.writer(buf, delimiter=";")
     writer.writerow([
         "Medlemsnr", "Navn", "Adresse", "Email", "Telefon",
-        "Antal medl.", "Antal ikke-medl.", "Gratis", "Antal i alt", "Betalt", "Note", "Mødt op",
+        "Antal medl.", "Heraf gratis medl.", "Antal ikke-medl.", "Heraf gratis ikke-medl.",
+        "Antal i alt", "Betalt", "Note", "Mødt op",
     ])
     cursor = db.participants.find({"event_id": event_id}).sort("navn", 1)
     async for p in cursor:
         nm = int(p.get("num_members", 1) or 0)
+        nmf = min(int(p.get("num_members_free", 0) or 0), nm)
         nnm = int(p.get("num_non_members", 0) or 0)
-        nf = int(p.get("num_free", 0) or 0)
+        nnmf = min(int(p.get("num_non_members_free", 0) or 0), nnm)
         addr = str(p.get("adresse", "")).replace("\n", ", ")
         writer.writerow([
             p.get("medlemsnummer", ""), p.get("navn", ""), addr,
             p.get("email", ""), p.get("telefon", ""),
-            nm, nnm, nf, nm + nnm + nf,
+            nm, nmf, nnm, nnmf, nm + nnm,
             "Ja" if p.get("paid") else "Nej",
             p.get("note", ""),
             "Ja" if p.get("checked_in") else "",

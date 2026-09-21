@@ -19,15 +19,16 @@ def event_to_out(
     doc,
     count: int = 0,
     total_members: int = 0,
+    total_members_free: int = 0,
     total_non_members: int = 0,
-    total_free: int = 0,
+    total_non_members_free: int = 0,
     expected_revenue: float = 0.0,
     paid_revenue: float = 0.0,
     checked_in_attendees: int = 0,
 ) -> dict:
     max_p = doc.get("max_participants")
     max_p = int(max_p) if isinstance(max_p, (int, float)) and max_p else None
-    total_att = total_members + total_non_members + total_free
+    total_att = total_members + total_non_members
     free_spots = max(0, max_p - total_att) if max_p is not None else None
     return {
         "id": str(doc["_id"]),
@@ -53,8 +54,9 @@ def event_to_out(
         "image_path": doc.get("image_path"),
         "participant_count": count,
         "total_members": total_members,
+        "total_members_free": total_members_free,
         "total_non_members": total_non_members,
-        "total_free": total_free,
+        "total_non_members_free": total_non_members_free,
         "total_attendees": total_att,
         "checked_in_attendees": checked_in_attendees,
         "expected_revenue": round(expected_revenue, 2),
@@ -75,8 +77,9 @@ def participant_to_out(doc) -> dict:
         "telefon": doc.get("telefon", ""),
         "note": doc.get("note", ""),
         "num_members": int(doc.get("num_members", 1) or 0),
+        "num_members_free": int(doc.get("num_members_free", 0) or 0),
         "num_non_members": int(doc.get("num_non_members", 0) or 0),
-        "num_free": int(doc.get("num_free", 0) or 0),
+        "num_non_members_free": int(doc.get("num_non_members_free", 0) or 0),
         "paid": bool(doc.get("paid", False)),
         "checked_in": bool(doc.get("checked_in", False)),
         "reminder_sent": bool(doc.get("reminder_sent", False)),
@@ -108,26 +111,23 @@ async def resolve_contact(db, member_id: str | None) -> dict:
     return out
 
 
-def compute_paying(num_members: int, num_non_members: int, num_free: int) -> tuple[int, int]:
-    """Given counts on one participant row, return (paying_members, paying_non_members)
-    after applying the free discount to members first, then non-members."""
+def compute_paying(num_members: int, num_members_free: int,
+                   num_non_members: int, num_non_members_free: int) -> tuple[int, int]:
+    """Given counts on one participant row, return (paying_members, paying_non_members).
+    Free is a subset of each category — total attendee count stays m+nm."""
     m = max(0, int(num_members or 0))
+    mf = min(max(0, int(num_members_free or 0)), m)
     nm = max(0, int(num_non_members or 0))
-    f = max(0, int(num_free or 0))
-    free_on_m = min(f, m)
-    pay_m = m - free_on_m
-    free_rem = f - free_on_m
-    free_on_nm = min(free_rem, nm)
-    pay_nm = nm - free_on_nm
-    return pay_m, pay_nm
+    nmf = min(max(0, int(num_non_members_free or 0)), nm)
+    return m - mf, nm - nmf
 
 
 async def aggregate_event_totals(db, event_id: str):
-    """Returns (count, total_members, total_non_members, total_free,
-    expected_revenue, paid_revenue, checked_in_attendees) for one event.
+    """Returns (count, total_members, total_members_free, total_non_members,
+    total_non_members_free, expected_revenue, paid_revenue, checked_in_attendees).
 
-    Free participants add to attendee count but do not add to revenue.
-    Discount applies to members first, then non-members."""
+    Free is a subset of each category and does NOT add to total attendees.
+    Free just reduces the paying count within its own category."""
     ev = (
         await db.events.find_one({"_id": ObjectId(event_id)})
         if ObjectId.is_valid(event_id)
@@ -138,24 +138,27 @@ async def aggregate_event_totals(db, event_id: str):
 
     count = 0
     total_m = 0
+    total_mf = 0
     total_nm = 0
-    total_free = 0
+    total_nmf = 0
     expected = 0.0
     paid = 0.0
     checked_in = 0
     async for p in db.participants.find({"event_id": event_id}):
         m = int(p.get("num_members", 1) or 0)
+        mf = min(int(p.get("num_members_free", 0) or 0), m)
         nm = int(p.get("num_non_members", 0) or 0)
-        f = int(p.get("num_free", 0) or 0)
-        pay_m, pay_nm = compute_paying(m, nm, f)
+        nmf = min(int(p.get("num_non_members_free", 0) or 0), nm)
+        pay_m, pay_nm = m - mf, nm - nmf
         row_expected = pay_m * price_m + pay_nm * price_nm
         count += 1
         total_m += m
+        total_mf += mf
         total_nm += nm
-        total_free += f
+        total_nmf += nmf
         expected += row_expected
         if p.get("paid"):
             paid += row_expected
         if p.get("checked_in"):
-            checked_in += m + nm + f
-    return count, total_m, total_nm, total_free, expected, paid, checked_in
+            checked_in += m + nm
+    return count, total_m, total_mf, total_nm, total_nmf, expected, paid, checked_in
