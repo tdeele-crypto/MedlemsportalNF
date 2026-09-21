@@ -114,19 +114,19 @@ export default function EventDetailPage() {
 
       <FinanceWidget event={event} />
 
-      <div className="mt-10 flex items-center justify-between gap-3 flex-wrap">
+      <div className="mt-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h2 className="text-xl font-semibold tracking-tight">Deltagere</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {participants.length > 0 && canEdit && (
             <Link to={`/arrangementer/${id}/check-in`} data-testid="quick-checkin-link">
-              <Button variant="outline">
+              <Button variant="outline" size="sm">
                 <ScanLine className="w-4 h-4 mr-2" strokeWidth={1.6} />
                 Hurtig check-in
               </Button>
             </Link>
           )}
           {participants.length > 0 && canEdit && (
-            <Button variant="outline" onClick={handleExportCsv} data-testid="export-csv-button">
+            <Button variant="outline" size="sm" onClick={handleExportCsv} data-testid="export-csv-button">
               <Download className="w-4 h-4 mr-2" strokeWidth={1.6} />
               Eksportér CSV
             </Button>
@@ -134,6 +134,7 @@ export default function EventDetailPage() {
           {isAdmin && (
             <Button
               variant="outline"
+              size="sm"
               onClick={handleShareFacebook}
               data-testid="facebook-share-button"
               className="border-[#1877F2]/30 text-[#1877F2] hover:bg-[#1877F2]/5 hover:text-[#1877F2]"
@@ -144,6 +145,7 @@ export default function EventDetailPage() {
           )}
           {canEdit && (
             <Button
+              size="sm"
               onClick={() => setAddOpen(true)}
               className="bg-primary hover:bg-primary/90 text-primary-foreground"
               data-testid="add-participant-button"
