@@ -94,7 +94,7 @@ export default function EditEventDialog({ open, onOpenChange, event, onSaved }) 
               data-testid="edit-event-image-upload"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="ev-date">Dato</Label>
               <Input
@@ -149,7 +149,7 @@ export default function EditEventDialog({ open, onOpenChange, event, onSaved }) 
               data-testid="edit-event-address-input"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="ev-pm">Pris medlem (kr.)</Label>
               <Input

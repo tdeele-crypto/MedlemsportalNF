@@ -108,7 +108,7 @@ export default function EventsPage() {
                     data-testid="event-image-upload"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-2">
                     <Label htmlFor="event_date">Dato</Label>
                     <Input
@@ -166,7 +166,7 @@ export default function EventsPage() {
                     data-testid="event-address-input"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-2">
                     <Label htmlFor="price_member">Pris medlem (kr.)</Label>
                     <Input
