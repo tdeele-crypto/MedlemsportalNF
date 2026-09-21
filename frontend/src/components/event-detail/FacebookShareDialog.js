@@ -56,7 +56,7 @@ export default function FacebookShareDialog({ open, onOpenChange, event, initial
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-white max-w-xl max-h-[90vh] overflow-y-auto" data-testid="facebook-share-dialog">
+      <DialogContent className="bg-white max-w-[calc(100vw-1rem)] sm:max-w-xl" data-testid="facebook-share-dialog">
         <DialogHeader>
           <DialogTitle>Del på Facebook</DialogTitle>
         </DialogHeader>

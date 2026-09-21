@@ -68,7 +68,7 @@ export default function AddParticipantDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-white max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="add-participant-dialog">
+      <DialogContent className="bg-white max-w-[calc(100vw-1rem)] sm:max-w-2xl" data-testid="add-participant-dialog">
         <DialogHeader>
           <DialogTitle>Tilføj deltager</DialogTitle>
         </DialogHeader>
