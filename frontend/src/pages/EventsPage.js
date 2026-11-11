@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Calendar, MapPin, ArrowRight, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
+import { isPastDate } from "@/lib/utils";
 
 export default function EventsPage() {
   const { user } = useAuth();
@@ -275,12 +276,15 @@ export default function EventsPage() {
             )}
           </div>
         )}
-        {events.map((ev) => (
+        {events.map((ev) => {
+          const past = isPastDate(ev.event_date);
+          return (
           <Link
             to={`/arrangementer/${ev.id}`}
             key={ev.id}
             data-testid={`event-card-${ev.id}`}
-            className="group border border-border rounded-md bg-white overflow-hidden hover:border-primary/40 transition-colors flex flex-col"
+            data-past={past ? "true" : "false"}
+            className={`group border rounded-md overflow-hidden hover:border-primary/40 transition-colors flex flex-col ${past ? "bg-red-50 border-red-200" : "bg-white border-border"}`}
           >
             {ev.image_path ? (
               <StoredImage
@@ -295,6 +299,14 @@ export default function EventsPage() {
             <div className="p-6 flex-1 flex flex-col">
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
+                  {past && (
+                    <span
+                      className="inline-block mb-2 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-semibold uppercase tracking-wider"
+                      data-testid={`event-past-badge-${ev.id}`}
+                    >
+                      Afholdt
+                    </span>
+                  )}
                   <h3 className="font-semibold text-lg text-foreground line-clamp-2 break-words">{ev.title}</h3>
                 <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                   {ev.event_date && (
@@ -360,7 +372,8 @@ export default function EventsPage() {
             </div>
             </div>
           </Link>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

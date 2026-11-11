@@ -4,6 +4,7 @@ import api, { formatApiError } from "@/lib/api";
 import { Users, Calendar, UserCheck } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
+import { isPastDate } from "@/lib/utils";
 
 function StatTile({ label, value, icon: Icon, testid }) {
   return (
@@ -74,16 +75,29 @@ export default function DashboardPage() {
               Ingen arrangementer endnu.
             </div>
           )}
-          {events.slice(0, 5).map((ev) => (
+          {events.slice(0, 5).map((ev) => {
+            const past = isPastDate(ev.event_date);
+            return (
             <Link
               key={ev.id}
               to={`/arrangementer/${ev.id}`}
               data-testid={`dashboard-event-${ev.id}`}
-              className="block p-4 hover:bg-muted/50 transition-colors"
+              data-past={past ? "true" : "false"}
+              className={`block p-4 transition-colors ${past ? "bg-red-50 hover:bg-red-100" : "hover:bg-muted/50"}`}
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="font-medium text-foreground">{ev.title}</div>
+                  <div className="font-medium text-foreground flex items-center gap-2">
+                    {ev.title}
+                    {past && (
+                      <span
+                        className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-semibold uppercase tracking-wider"
+                        data-testid={`dashboard-event-past-badge-${ev.id}`}
+                      >
+                        Afholdt
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
                     {ev.event_date ? new Date(ev.event_date).toLocaleDateString("da-DK") : "Ingen dato"}
                     {ev.event_time ? ` kl. ${ev.event_time}` : ""}
@@ -96,7 +110,8 @@ export default function DashboardPage() {
                 </div>
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       </section>
     </div>
