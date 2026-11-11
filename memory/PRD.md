@@ -46,6 +46,8 @@ Arrangement og medlems check app: Webapp skal både have frontend og backend, me
 - ✅ **2026-06**: Afholdte arrangementer (dato før i dag) vises med lys rød baggrund + "Afholdt"-mærke på både Oversigt (`DashboardPage.js`) og Arrangementer (`EventsPage.js`). Fælles helper `isPastDate` i `lib/utils.js`. Verificeret via screenshot.
 - ✅ **2026-06**: Nyt menupunkt **Admin** (kun admin) på `/admin` med faner "Brugere" (tidligere `/brugere`, som nu omdirigerer) og "App admin" (view only-link med Kopier/Åbn). Backend `GET /api/admin/public-link` (kun admin) returnerer `/p/{PUBLIC_EVENTS_TOKEN}`; frontend bygger linket ud fra det aktuelle domæne. Verificeret via curl og screenshot.
 - ✅ **2026-06**: "Rediger tilmelding"-dialogen viser medlemstype-mærke efter navnet. `GET /events/{id}/participants` henter medlemstype live fra `members` (feltet `medlemstype` er tilføjet i `ParticipantOut`).
+- ✅ **2026-06**: Oversigt opdelt i "Kommende arrangementer" (stigende dato) og "Afsluttede arrangementer" (nyeste først, lys rød boks med "Afholdt"-mærke) med afstand imellem. Alle arrangementer vises (ikke længere kun 5).
+
 
 
 
