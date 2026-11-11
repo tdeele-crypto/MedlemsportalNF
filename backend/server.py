@@ -372,7 +372,11 @@ async def delete_event(event_id: str, _admin: dict = Depends(require_admin)):
 @api.get("/events/{event_id}/participants", response_model=List[ParticipantOut])
 async def list_participants(event_id: str, _user: dict = Depends(get_current_user)):
     cursor = db.participants.find({"event_id": event_id}).sort("added_at", 1)
-    return [participant_to_out(d) async for d in cursor]
+    docs = [d async for d in cursor]
+    ids = [ObjectId(d["member_id"]) for d in docs if ObjectId.is_valid(d.get("member_id", ""))]
+    types = {str(m["_id"]): m.get("medlemstype", "")
+             async for m in db.members.find({"_id": {"$in": ids}}, {"medlemstype": 1})}
+    return [{**participant_to_out(d), "medlemstype": types.get(d.get("member_id"), "")} for d in docs]
 
 
 @api.post("/events/{event_id}/participants", response_model=ParticipantOut)

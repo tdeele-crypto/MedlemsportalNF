@@ -97,6 +97,7 @@ class ParticipantOut(BaseModel):
     member_id: str
     medlemsnummer: str
     navn: str
+    medlemstype: str = ""
     adresse: str = ""
     email: str = ""
     telefon: str = ""

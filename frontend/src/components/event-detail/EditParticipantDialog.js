@@ -1,3 +1,4 @@
+import MedlemstypeBadge from "@/components/MedlemstypeBadge";
 import { useEffect, useState } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -63,7 +64,12 @@ export default function EditParticipantDialog({ participant, eventId, onClose, o
         data-testid="edit-participant-dialog"
       >
         <DialogHeader>
-          <DialogTitle>Rediger tilmelding{participant ? ` – ${participant.navn}` : ""}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2 flex-wrap">
+            Rediger tilmelding{participant ? ` – ${participant.navn}` : ""}
+            {participant?.medlemstype && (
+              <MedlemstypeBadge type={participant.medlemstype} testId="edit-participant-medlemstype" />
+            )}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           {/* Members pair */}
