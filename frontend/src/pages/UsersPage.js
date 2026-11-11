@@ -21,7 +21,7 @@ import { toast } from "sonner";
 
 const empty = { email: "", password: "", name: "", role: "user" };
 
-export default function UsersPage() {
+export default function UsersPage({ embedded = false }) {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
   const [open, setOpen] = useState(false);
@@ -88,10 +88,14 @@ export default function UsersPage() {
   };
 
   return (
-    <div className="p-6 md:p-10 max-w-5xl mx-auto" data-testid="users-page">
+    <div className={embedded ? "" : "p-6 md:p-10 max-w-5xl mx-auto"} data-testid="users-page">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Brugere</h1>
+          {embedded ? (
+            <h2 className="text-lg font-semibold tracking-tight">Brugere</h2>
+          ) : (
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Brugere</h1>
+          )}
           <p className="text-sm text-muted-foreground mt-1">
             Administrer hvem der kan logge ind i systemet
           </p>

@@ -753,6 +753,14 @@ def _public_event_minimal(ev: dict, request: Request) -> dict:
     }
 
 
+@api.get("/admin/public-link")
+async def admin_public_link(_admin: dict = Depends(require_admin)):
+    token = os.environ.get("PUBLIC_EVENTS_TOKEN", "").strip()
+    if not token:
+        raise HTTPException(status_code=404, detail="PUBLIC_EVENTS_TOKEN er ikke sat på serveren")
+    return {"token": token, "path": f"/p/{token}"}
+
+
 @api.get("/public/events/{token}")
 async def public_events(token: str, request: Request):
     """Public read-only list of UPCOMING events. Cryptic-token gated."""

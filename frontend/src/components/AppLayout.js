@@ -29,7 +29,7 @@ export default function AppLayout() {
 
   const items = navItems.filter((it) => !it.adminOnly || user?.role === "admin");
   if (user?.role === "admin") {
-    items.push({ to: "/brugere", label: "Brugere", icon: UserCog, key: "users" });
+    items.push({ to: "/admin", label: "Admin", icon: UserCog, key: "admin" });
   }
 
   return (

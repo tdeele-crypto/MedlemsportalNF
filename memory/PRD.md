@@ -44,6 +44,8 @@ Arrangement og medlems check app: Webapp skal både have frontend og backend, me
 - ✅ **2026-02-23**: NEW — Medlems-detaljeside med tilmeldingshistorik (`/medlemmer/:id`) + backend `GET /api/members/{id}/registrations`. Klik på en tilmelding → arrangementets detaljeside. 10/10 tests pass + frontend Playwright flows verified.
 - ✅ **2026-02-24**: **Gratis Deltagere** felt i "Tilføj deltager" og "Rediger tilmelding" dialogerne — omarbejdet efter brugerfeedback: nu to parrede felter (`num_members_free` og `num_non_members_free`), gratis er en delmængde af hver kategori. Total deltagere = m + nm (gratis dobbelttælles ikke). Pris = (m - mf) × pris_m + (nm - nmf) × pris_nm. Backend validerer hver gratis-værdi <= sit modstykke. CSV-eksport, event-header og deltagerkort viser "(N gratis)" pr. kategori. 6/6 pytest + manuel Playwright validering bestået. Data-migration: `num_free` felt fjernet fra alle deltager-dokumenter.
 - ✅ **2026-06**: Afholdte arrangementer (dato før i dag) vises med lys rød baggrund + "Afholdt"-mærke på både Oversigt (`DashboardPage.js`) og Arrangementer (`EventsPage.js`). Fælles helper `isPastDate` i `lib/utils.js`. Verificeret via screenshot.
+- ✅ **2026-06**: Nyt menupunkt **Admin** (kun admin) på `/admin` med faner "Brugere" (tidligere `/brugere`, som nu omdirigerer) og "App admin" (view only-link med Kopier/Åbn). Backend `GET /api/admin/public-link` (kun admin) returnerer `/p/{PUBLIC_EVENTS_TOKEN}`; frontend bygger linket ud fra det aktuelle domæne. Verificeret via curl og screenshot.
+
 
 
 ## Backlog

@@ -10,7 +10,7 @@ import MemberDetailPage from "@/pages/MemberDetailPage";
 import EventsPage from "@/pages/EventsPage";
 import EventDetailPage from "@/pages/EventDetailPage";
 import QuickCheckInPage from "@/pages/QuickCheckInPage";
-import UsersPage from "@/pages/UsersPage";
+import AdminPage from "@/pages/AdminPage";
 import PublicEventsPage from "@/pages/PublicEventsPage";
 
 function ProtectedRoute({ children, adminOnly = false, allowEditor = false }) {
@@ -81,13 +81,14 @@ function App() {
             <Route path="arrangementer" element={<EventsPage />} />
             <Route path="arrangementer/:id" element={<EventDetailPage />} />
             <Route
-              path="brugere"
+              path="admin"
               element={
                 <ProtectedRoute adminOnly>
-                  <UsersPage />
+                  <AdminPage />
                 </ProtectedRoute>
               }
             />
+            <Route path="brugere" element={<Navigate to="/admin" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
